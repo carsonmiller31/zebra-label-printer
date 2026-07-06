@@ -12,8 +12,8 @@
     "start": "electron .",
     "server": "node server.js",
     "make-icon": "node scripts/make-icon.js",
-    "dist:win": "npm run make-icon && electron-builder --win",
-    "dist": "npm run make-icon && electron-builder"
+    "dist:win": "npm run make-icon && electron-builder --win -p never",
+    "dist": "npm run make-icon && electron-builder -p never"
   },
   "devDependencies": {
     "electron": "^33.2.1",
