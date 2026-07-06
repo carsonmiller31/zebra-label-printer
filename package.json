@@ -1,0 +1,55 @@
+{
+  "name": "zebra-label-printer",
+  "version": "0.1.0",
+  "description": "Desktop app to design and print custom ZPL labels to a Zebra GX420d over the network.",
+  "main": "electron/main.js",
+  "author": {
+    "name": "Waveflow",
+    "email": "carson@waveflow.dev"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "make-icon": "node scripts/make-icon.js",
+    "dist:win": "npm run make-icon && electron-builder --win",
+    "dist": "npm run make-icon && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.waveflow.zebralabelprinter",
+    "productName": "Zebra Label Printer",
+    "artifactName": "${productName} Setup ${version}.${ext}",
+    "files": [
+      "electron/**",
+      "server.js",
+      "public/**",
+      "build/icon.png"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Zebra Label Printer",
+      "uninstallDisplayName": "Zebra Label Printer"
+    }
+  }
+}

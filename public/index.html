@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zebra GX420d Label Designer</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Zebra GX420d Label Designer</h1>
+      <p>Design custom labels and print them to your printer over the network.</p>
+    </header>
+
+    <!-- Connection -->
+    <div class="card">
+      <h2>Printer Connection</h2>
+      <div class="row">
+        <div style="flex: 2;">
+          <label for="ip">Printer IP address</label>
+          <input id="ip" type="text" placeholder="192.168.1.50" autocomplete="off" />
+        </div>
+        <div>
+          <label for="port">Port</label>
+          <input id="port" type="text" value="9100" autocomplete="off" />
+        </div>
+      </div>
+      <div class="hint">GX420d uses raw port 9100. Hold the feed button to print a config label showing the IP.</div>
+      <div class="btns">
+        <button id="testBtn">Print Test Label</button>
+        <button class="secondary" id="restoreBtn">Restore Printer Defaults</button>
+      </div>
+      <div class="hint">"Restore Printer Defaults" reloads the printer's saved settings (^JUR) — use it if other software starts printing off after using this app.</div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <!-- Designer -->
+    <div class="card">
+      <h2>Label Setup</h2>
+      <div class="row" style="margin-bottom:20px;">
+        <div>
+          <!-- Default stock: Zebra item 300200, 3" x 2" -->
+          <label for="labelW">Width (inches)</label>
+          <input id="labelW" type="number" step="0.05" min="0.5" value="3" />
+        </div>
+        <div>
+          <label for="labelH">Height (inches)</label>
+          <input id="labelH" type="number" step="0.05" min="0.5" value="2" />
+        </div>
+        <div>
+          <label for="dpi">Printer DPI</label>
+          <select id="dpi">
+            <option value="203" selected>203 dpi (GX420d)</option>
+            <option value="300">300 dpi (GX420t/430)</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="secondary small" id="borderBtn" style="width:100%;">Print Border Test</button>
+        </div>
+      </div>
+      <div class="hint" id="dotsInfo" style="margin-top:-12px; margin-bottom:16px;"></div>
+
+      <div class="designer">
+        <!-- Tools -->
+        <div class="tool-col">
+          <button class="secondary small" data-add="text">+ Text</button>
+          <button class="secondary small" data-add="barcode">+ Barcode</button>
+          <button class="secondary small" data-add="qr">+ QR Code</button>
+          <div class="tool-label">Templates</div>
+          <button class="secondary small" data-template="item-4up">Item Label (4&#8209;up)</button>
+          <div class="tool-label">Edit</div>
+          <button class="secondary small" id="dupBtn" disabled>Duplicate</button>
+          <button class="danger small" id="deleteBtn" disabled>Delete</button>
+          <button class="secondary small" id="clearBtn">Clear All</button>
+          <div class="hint" style="margin-top:4px;">Double-click text to edit it. ⌘/Ctrl+C / V to copy &amp; paste, ⌘/Ctrl+D to duplicate.</div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="canvas-col">
+          <div class="canvas-stage">
+            <div id="label"></div>
+          </div>
+          <div class="zoom-ctrl">
+            <span>Zoom</span>
+            <button class="secondary small" id="zoomOut">&minus;</button>
+            <span id="zoomVal">100%</span>
+            <button class="secondary small" id="zoomIn">+</button>
+            <button class="secondary small" id="zoomFit">Fit</button>
+            <span style="margin-left:12px; display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="snap" checked style="width:auto;" />
+              <label for="snap" style="margin:0;">Snap to grid</label>
+            </span>
+            <select id="gridSize" style="width:auto; padding:4px 8px;">
+              <option value="5">5 dots</option>
+              <option value="10" selected>10 dots</option>
+              <option value="20">20 dots</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Properties -->
+        <div class="props" id="props">
+          <h2 style="margin-bottom:12px;">Properties</h2>
+          <div class="prop-empty">Select an element to edit it, or add one from the left.</div>
+        </div>
+      </div>
+
+      <div class="btns">
+        <button id="printBtn">Print This Label</button>
+        <button class="secondary" id="toggleZpl">Show ZPL</button>
+      </div>
+    </div>
+
+    <!-- ZPL output -->
+    <div class="card" id="zplCard" style="display:none;">
+      <h2>Generated ZPL</h2>
+      <textarea id="zpl" spellcheck="false" readonly></textarea>
+      <div class="hint">This ZPL is generated from your design and sent to the printer.</div>
+    </div>
+  </div>
+
+  <script src="/qrcode.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

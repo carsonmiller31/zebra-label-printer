@@ -1,0 +1,40 @@
+name: Build Windows installer
+
+# Builds the Windows NSIS installer on a real Windows runner (the reliable way
+# to get the .exe without a local Windows PC). Runs on every push/tag and can be
+# started manually from the Actions tab. The installer is uploaded as a build
+# artifact; tags also create a GitHub Release with the installer attached.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build installer
+        run: npm run dist:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zebra-label-printer-windows
+          path: release/*.exe
+
+      - name: Attach installer to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
