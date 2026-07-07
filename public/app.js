@@ -24,10 +24,23 @@ function snapVal(v) {
 
 // ---- Connection persistence ----
 const ipEl = $('#ip'), portEl = $('#port');
-ipEl.value = localStorage.getItem('zebra_ip') || '';
+ipEl.value = localStorage.getItem('zebra_ip') || '192.168.0.95';
 portEl.value = localStorage.getItem('zebra_port') || '9100';
-ipEl.addEventListener('input', () => localStorage.setItem('zebra_ip', ipEl.value));
-portEl.addEventListener('input', () => localStorage.setItem('zebra_port', portEl.value));
+ipEl.addEventListener('input', () => { localStorage.setItem('zebra_ip', ipEl.value); updateConnSummary(); });
+portEl.addEventListener('input', () => { localStorage.setItem('zebra_port', portEl.value); updateConnSummary(); });
+
+// ---- Connection panel (collapsed by default) ----
+const connToggle = $('#connToggle'), connPanel = $('#connPanel'), connSummary = $('#connSummary');
+function updateConnSummary() {
+  const ip = ipEl.value.trim();
+  connSummary.textContent = ip ? `${ip}:${portEl.value.trim() || '9100'}` : 'No printer set';
+}
+connToggle.addEventListener('click', () => {
+  const open = connPanel.hasAttribute('hidden');
+  if (open) connPanel.removeAttribute('hidden'); else connPanel.setAttribute('hidden', '');
+  connToggle.setAttribute('aria-expanded', String(open));
+});
+updateConnSummary();
 
 // ---- Label size configuration ----
 const labelWEl = $('#labelW'), labelHEl = $('#labelH'), dpiEl = $('#dpi');
@@ -85,7 +98,7 @@ function applyItemLabel4Up() {
   const margin = 20, gutter = 20;
   const cellW = Math.floor((LABEL_W - 2 * margin - gutter) / 2);
   const cellH = Math.floor((LABEL_H - 2 * margin - gutter) / 2);
-  const nameSize = clamp(Math.floor(cellH * 0.18), 16, 30);
+  const nameSize = 15;
   const bcHeight = clamp(cellH - nameSize - 24, 30, 80);
 
   let n = 1;
@@ -141,11 +154,12 @@ function renderLabel() {
       node.textContent = el.text || ' ';
       node.addEventListener('dblclick', (e) => { e.stopPropagation(); startEditing(node, el); });
     } else if (el.type === 'barcode') {
-      const w = estimateBarcodeWidth(el) * zoom;
-      node.style.width = w + 'px';
-      node.style.height = el.height * zoom + 'px';
+      const modules = barcodeModules(el);
+      node.style.width = modules * el.moduleWidth * zoom + 'px';
       const bars = document.createElement('div');
       bars.className = 'bars';
+      bars.style.height = el.height * zoom + 'px';
+      bars.appendChild(renderBarcodeCanvas(el));
       node.appendChild(bars);
       if (el.showText) {
         const t = document.createElement('div');
@@ -166,9 +180,40 @@ function renderLabel() {
   }
 }
 
-// Rough on-screen size estimates (preview only — printer renders the real thing).
-function estimateBarcodeWidth(el) {
-  return Math.max(60, String(el.data).length * el.moduleWidth * 11);
+// Real Code 128 encoding for this element, memoized per element+data so a single
+// render() doesn't encode twice. Matches how the printer renders ^BCN, so the
+// preview width (module count × module width) equals the printed width, including
+// the start/checksum/stop symbols the printer always adds.
+const barcodeCache = new WeakMap();
+function barcodeEncoding(el) {
+  const data = String(el.data == null ? '' : el.data);
+  const hit = barcodeCache.get(el);
+  if (hit && hit.data === data) return hit.enc;
+  const enc = Barcode128.encode(data);
+  barcodeCache.set(el, { data, enc });
+  return enc;
+}
+
+// Total module count = printed barcode width in units of one module width.
+function barcodeModules(el) {
+  return barcodeEncoding(el).modules;
+}
+
+// Draw the real bar pattern to a pixel-perfect canvas (one canvas pixel per
+// module) and let CSS stretch it to width (modules × module width) and the
+// configured bar height, crisply.
+function renderBarcodeCanvas(el) {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'bc-canvas';
+  const { bits, modules } = barcodeEncoding(el);
+  canvas.width = Math.max(1, modules);
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, 1);
+  ctx.fillStyle = '#111';
+  for (let x = 0; x < modules; x++) if (bits[x]) ctx.fillRect(x, 0, 1, 1);
+  return canvas;
 }
 // Real QR module matrix for this element's data, memoized per element+data so a
 // single render() doesn't encode twice. Uses error-correction level M to match
@@ -355,7 +400,11 @@ function generateZpl() {
     if (el.type === 'text') {
       z += `^FO${el.x},${el.y}^A0N,${el.fontSize},${el.fontSize}^FD${zplSanitize(el.text)}^FS\n`;
     } else if (el.type === 'barcode') {
-      z += `^FO${el.x},${el.y}^BY${el.moduleWidth}^BCN,${el.height},${el.showText ? 'Y' : 'N'},N,N^FD${zplSanitize(el.data)}^FS\n`;
+      // Mode A (automatic) lets the printer pack digit pairs into Code 128
+      // subset C — the compact encoding the preview draws. Without it the
+      // printer stays in subset B (one symbol per digit) and prints ~1.6× wider
+      // than the preview for numeric data.
+      z += `^FO${el.x},${el.y}^BY${el.moduleWidth}^BCN,${el.height},${el.showText ? 'Y' : 'N'},N,N,A^FD${zplSanitize(el.data)}^FS\n`;
     } else if (el.type === 'qr') {
       z += `^FO${el.x},${el.y}^BQN,2,${el.mag}^FDMA,${zplSanitize(el.data)}^FS\n`;
     }

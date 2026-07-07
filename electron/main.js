@@ -24,9 +24,28 @@ if (!gotLock) {
     }
   });
 
+  // Prefer a stable loopback port so the page always loads from the same origin
+  // (e.g. http://127.0.0.1:47929). localStorage is scoped per origin, so a
+  // fixed port is what lets the app remember the saved IP/port and other
+  // settings across restarts. If a candidate is already taken we try the next;
+  // OS-assigned (0) is only a last resort.
+  const PREFERRED_PORTS = [47929, 47930, 47931, 47932, 0];
+  async function startOnStablePort() {
+    for (const p of PREFERRED_PORTS) {
+      try {
+        return await start(p, '127.0.0.1');
+      } catch (err) {
+        if (err && err.code === 'EADDRINUSE') continue;
+        throw err;
+      }
+    }
+    // Every fixed candidate was busy; fall back to an OS-assigned port.
+    return start(0, '127.0.0.1');
+  }
+
   async function createWindow() {
-    // Port 0 => OS assigns a free loopback port; nothing is exposed to the LAN.
-    server = await start(0, '127.0.0.1');
+    // Loopback-only binding; nothing is exposed to the LAN.
+    server = await startOnStablePort();
     const { port } = server.address();
 
     mainWindow = new BrowserWindow({

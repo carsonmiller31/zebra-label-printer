@@ -15,23 +15,31 @@
 
     <!-- Connection -->
     <div class="card">
-      <h2>Printer Connection</h2>
-      <div class="row">
-        <div style="flex: 2;">
-          <label for="ip">Printer IP address</label>
-          <input id="ip" type="text" placeholder="192.168.1.50" autocomplete="off" />
-        </div>
-        <div>
-          <label for="port">Port</label>
-          <input id="port" type="text" value="9100" autocomplete="off" />
-        </div>
+      <div class="conn-bar">
+        <button class="secondary" id="connToggle" aria-expanded="false">
+          <span class="conn-gear">⚙</span> Printer Connection
+        </button>
+        <span class="conn-summary" id="connSummary"></span>
       </div>
-      <div class="hint">GX420d uses raw port 9100. Hold the feed button to print a config label showing the IP.</div>
-      <div class="btns">
-        <button id="testBtn">Print Test Label</button>
-        <button class="secondary" id="restoreBtn">Restore Printer Defaults</button>
+
+      <div id="connPanel" class="conn-panel" hidden>
+        <div class="row">
+          <div style="flex: 2;">
+            <label for="ip">Printer IP address</label>
+            <input id="ip" type="text" placeholder="192.168.0.95" autocomplete="off" />
+          </div>
+          <div>
+            <label for="port">Port</label>
+            <input id="port" type="text" value="9100" autocomplete="off" />
+          </div>
+        </div>
+        <div class="hint">GX420d uses raw port 9100. Hold the feed button to print a config label showing the IP.</div>
+        <div class="btns">
+          <button id="testBtn">Print Test Label</button>
+          <button class="secondary" id="restoreBtn">Restore Printer Defaults</button>
+        </div>
+        <div class="hint">"Restore Printer Defaults" reloads the printer's saved settings (^JUR) — use it if other software starts printing off after using this app.</div>
       </div>
-      <div class="hint">"Restore Printer Defaults" reloads the printer's saved settings (^JUR) — use it if other software starts printing off after using this app.</div>
       <div id="status" class="status"></div>
     </div>
 
@@ -121,6 +129,7 @@
   </div>
 
   <script src="/qrcode.js"></script>
+  <script src="/barcode128.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
