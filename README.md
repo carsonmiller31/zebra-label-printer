@@ -45,11 +45,40 @@ npm install
 npm run dist:win
 ```
 
-The installer lands in `release\Zebra Label Printer Setup <version>.exe`.
+The installer lands in `release\Zebra-Label-Printer-Setup-<version>.exe`.
 
 > Building the Windows installer on macOS/Linux is **not** supported here — the
 > NSIS target needs Wine, which is unreliable on Apple-Silicon macOS. Use one of
 > the options above.
+
+## Shipping updates (auto-update)
+
+Installed copies update themselves. On launch (and every 6 hours), the app
+checks this repo's **GitHub Releases** via `electron-updater`, downloads any
+newer version in the background, and prompts the user to **Restart now** (or it
+installs on next quit). No reinstalling by hand.
+
+To publish an update:
+
+```bash
+npm run release:patch   # 0.2.0 -> 0.2.1 : bumps package.json, commits, tags, pushes
+# or: npm run release:minor for 0.2.0 -> 0.3.0
+```
+
+Pushing the `v*` tag triggers the workflow, which builds the installer and
+publishes a GitHub Release containing the `.exe`, its `.blockmap`, and
+`latest.yml` (the manifest the updater reads). Existing installs pick it up
+automatically within a few hours — or immediately on their next launch.
+
+**One-time bootstrap:** auto-update only works for copies that already contain
+the updater (v0.2.0+). Install the **v0.2.0** build on each PC once, by hand;
+every version after that arrives automatically.
+
+Notes:
+- The version in a release **must be higher** than what's installed, or nothing
+  happens. The `release:*` scripts handle the bump for you.
+- Because the app is unsigned, the silent updater still applies cleanly, but the
+  very first manual install shows the SmartScreen "Run anyway" prompt.
 
 ## Development
 
@@ -64,7 +93,7 @@ npm run make-icon  # regenerate build/icon.png
 
 | Path                                  | Purpose                                            |
 | ------------------------------------- | -------------------------------------------------- |
-| `electron/main.js`                    | Electron main process — boots the server + window  |
+| `electron/main.js`                    | Electron main process — server, window, auto-update |
 | `server.js`                           | Label server: static files, `/api/print`, ZPL test |
 | `public/`                             | The label-designer UI (HTML/CSS/JS)                |
 | `scripts/make-icon.js`                | Generates the app icon (no dependencies)           |

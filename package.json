@@ -1,8 +1,9 @@
 {
   "name": "zebra-label-printer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Desktop app to design and print custom ZPL labels to a Zebra GX420d over the network.",
   "main": "electron/main.js",
+  "homepage": "https://github.com/carsonmiller31/zebra-label-printer",
   "author": {
     "name": "Waveflow",
     "email": "carson@waveflow.dev"
@@ -13,7 +14,12 @@
     "server": "node server.js",
     "make-icon": "node scripts/make-icon.js",
     "dist:win": "npm run make-icon && electron-builder --win -p never",
-    "dist": "npm run make-icon && electron-builder -p never"
+    "dist": "npm run make-icon && electron-builder -p never",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "electron": "^33.2.1",
@@ -22,7 +28,13 @@
   "build": {
     "appId": "dev.waveflow.zebralabelprinter",
     "productName": "Zebra Label Printer",
-    "artifactName": "${productName} Setup ${version}.${ext}",
+    "artifactName": "Zebra-Label-Printer-Setup-${version}.${ext}",
+    "publish": {
+      "provider": "github",
+      "owner": "carsonmiller31",
+      "repo": "zebra-label-printer",
+      "releaseType": "release"
+    },
     "files": [
       "electron/**",
       "server.js",

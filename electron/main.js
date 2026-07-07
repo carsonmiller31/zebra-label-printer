@@ -56,6 +56,59 @@ if (!gotLock) {
     });
 
     await mainWindow.loadURL(`http://127.0.0.1:${port}/`);
+
+    setupAutoUpdater();
+  }
+
+  // --- Auto-update (GitHub Releases via electron-updater) ---------------------
+  // Checks the project's GitHub Releases for a newer version, downloads it in
+  // the background, and offers to restart to install. The update feed is the
+  // `latest.yml` published alongside each release by the build workflow.
+  const UPDATE_OWNER = 'carsonmiller31';
+  const UPDATE_REPO = 'zebra-label-printer';
+
+  function setupAutoUpdater() {
+    // electron-updater only works from a packaged build (it compares against the
+    // installed app version); skip it during `npm start` dev runs.
+    if (!app.isPackaged) return;
+
+    let autoUpdater;
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch (err) {
+      console.log('electron-updater unavailable:', err);
+      return;
+    }
+
+    autoUpdater.autoDownload = true;          // fetch the update in the background
+    autoUpdater.autoInstallOnAppQuit = true;  // if user picks "Later", install on next quit
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.setFeedURL({ provider: 'github', owner: UPDATE_OWNER, repo: UPDATE_REPO });
+
+    autoUpdater.on('error', (err) => console.log('Auto-update error:', err));
+    autoUpdater.on('update-available', (info) => console.log('Update available:', info && info.version));
+    autoUpdater.on('update-not-available', () => console.log('No update available.'));
+
+    let promptShown = false;
+    autoUpdater.on('update-downloaded', async (info) => {
+      if (promptShown) return; // only ask once per run
+      promptShown = true;
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        buttons: ['Restart now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        title: 'Update ready',
+        message: `Zebra Label Printer ${info && info.version ? info.version : ''} is ready to install.`,
+        detail: 'Restart now to finish updating. If you choose Later, it installs automatically the next time you close the app.',
+      });
+      if (response === 0) autoUpdater.quitAndInstall();
+    });
+
+    const check = () =>
+      autoUpdater.checkForUpdates().catch((err) => console.log('Update check failed:', err));
+    setTimeout(check, 4000);                    // shortly after launch
+    setInterval(check, 6 * 60 * 60 * 1000);     // and every 6 hours while running
   }
 
   app.whenReady()
