@@ -1,6 +1,6 @@
 {
   "name": "zebra-label-printer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Desktop app to design and print custom ZPL labels to a Zebra GX420d over the network.",
   "main": "electron/main.js",
   "homepage": "https://github.com/carsonmiller31/zebra-label-printer",
