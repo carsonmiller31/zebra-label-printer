@@ -153,3 +153,46 @@ button.small { padding: 7px 12px; font-size: 13px; }
 .props .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .props .checkbox-row input { width: auto; }
 .props .checkbox-row label { margin: 0; }
+
+/* ---- Batch print modal ---- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(16, 24, 40, .45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 48px 20px; overflow: auto;
+}
+.modal-overlay[hidden] { display: none; }
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 28px;
+  width: 100%; max-width: 640px;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, .25);
+}
+.modal h2 { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 8px; }
+.batch-list { margin: 18px 0 8px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.batch-item {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; font-size: 14px;
+}
+.batch-item .bi-num { color: var(--muted); font-size: 12px; width: 22px; flex: none; }
+/* Name/barcode are editable inputs that look like plain text until focused. */
+.batch-item input.bi-name,
+.batch-item input.bi-code {
+  border: 1px solid transparent; background: transparent; border-radius: 6px;
+  padding: 3px 6px; font-size: 14px; width: auto;
+}
+.batch-item input.bi-name { font-weight: 600; flex: 1; min-width: 0; }
+.batch-item input.bi-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); flex: none; width: 130px; }
+.batch-item input.bi-name:hover,
+.batch-item input.bi-code:hover { border-color: var(--border); }
+.batch-item input.bi-name:focus,
+.batch-item input.bi-code:focus { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 3px rgba(37,99,235,.12); color: var(--text); }
+.batch-item .bi-del {
+  background: none; border: none; color: var(--err); font-size: 18px; line-height: 1;
+  padding: 0 4px; cursor: pointer; flex: none;
+}
+.batch-item .bi-del:hover { background: none; opacity: .7; }
+.batch-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }

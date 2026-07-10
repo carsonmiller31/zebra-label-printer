@@ -87,34 +87,58 @@ function applyTemplate(name) {
   if (name === 'item-4up') applyItemLabel4Up();
 }
 
-// Item Label: four independent barcode+name units laid out 2×2 to fill the label,
-// so one print produces four small item labels. Positions are derived from the
-// current label size, so it adapts if the stock dimensions change.
-function applyItemLabel4Up() {
-  if (elements.length && !confirm('Replace the current label with the Item Label (4-up) template?')) return;
-  elements = [];
-  selectedId = null;
-
+// Cell geometry for the 4-up item layout, derived from the current label size so
+// it adapts if the stock dimensions change. Returns four cell origins (2×2) plus
+// the name font size and barcode height shared by every unit.
+function items4UpLayout() {
   const margin = 20, gutter = 20;
   const cellW = Math.floor((LABEL_W - 2 * margin - gutter) / 2);
   const cellH = Math.floor((LABEL_H - 2 * margin - gutter) / 2);
   const nameSize = 15;
   const bcHeight = clamp(cellH - nameSize - 24, 30, 80);
-
-  let n = 1;
+  const cells = [];
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 2; c++) {
-      const x = margin + c * (cellW + gutter);
-      const y = margin + r * (cellH + gutter);
-      elements.push({ id: nextId++, type: 'text', x, y, text: 'Item ' + n, fontSize: nameSize });
-      elements.push({
-        id: nextId++, type: 'barcode', x, y: y + nameSize + 8,
-        data: String(n).padStart(8, '0'), height: bcHeight, moduleWidth: 2, showText: true,
-      });
-      n++;
+      cells.push({ x: margin + c * (cellW + gutter), y: margin + r * (cellH + gutter) });
     }
   }
+  return { cells, nameSize, bcHeight };
+}
+
+// Item Label: four independent barcode+name units laid out 2×2 to fill the label,
+// so one print produces four small item labels.
+function applyItemLabel4Up() {
+  if (elements.length && !confirm('Replace the current label with the Item Label (4-up) template?')) return;
+  elements = [];
+  selectedId = null;
+
+  const { cells, nameSize, bcHeight } = items4UpLayout();
+  cells.forEach(({ x, y }, i) => {
+    const n = i + 1;
+    elements.push({ id: nextId++, type: 'text', x, y, text: 'Item ' + n, fontSize: nameSize });
+    elements.push({
+      id: nextId++, type: 'barcode', x, y: y + nameSize + 8,
+      data: String(n).padStart(8, '0'), height: bcHeight, moduleWidth: 2, showText: true,
+    });
+  });
   render();
+}
+
+// Build one physical label's ZPL holding up to 4 item units (name + Code 128),
+// laid out 2×2 exactly like the Item Label template. Used by the batch printer.
+function buildItems4UpZpl(items) {
+  const { cells, nameSize, bcHeight } = items4UpLayout();
+  let z = '^XA\n';
+  z += `^PW${LABEL_W}\n^LL${LABEL_H}\n`;
+  items.slice(0, 4).forEach((it, i) => {
+    const { x, y } = cells[i];
+    if (it.name) z += `^FO${x},${y}^A0N,${nameSize},${nameSize}^FD${zplSanitize(it.name)}^FS\n`;
+    if (it.barcode) {
+      z += `^FO${x},${y + nameSize + 8}^BY2^BCN,${bcHeight},Y,N,N,A^FD${zplSanitize(it.barcode)}^FS\n`;
+    }
+  });
+  z += '^XZ';
+  return z;
 }
 
 // ---- Rendering ----
@@ -467,6 +491,17 @@ function printLabel(zpl, btn) {
   return sendZpl(withPrintSettings(zpl), btn);
 }
 
+// Low-level: POST one ZPL job to the current printer and return the server's JSON.
+// Callers are responsible for status/UI. Assumes the IP has already been checked.
+async function postPrint(zpl) {
+  const r = await fetch('/api/print', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ip: ipEl.value.trim(), port: portEl.value.trim() || '9100', zpl }),
+  });
+  return r.json();
+}
+
 async function sendZpl(zpl, btn) {
   const ip = ipEl.value.trim();
   if (!ip) { showStatus(false, 'Enter the printer IP address first.'); return; }
@@ -474,12 +509,7 @@ async function sendZpl(zpl, btn) {
   btn.disabled = true;
   btn.textContent = 'Sending…';
   try {
-    const r = await fetch('/api/print', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip, port: portEl.value.trim() || '9100', zpl }),
-    });
-    const j = await r.json();
+    const j = await postPrint(zpl);
     showStatus(j.ok, (j.ok ? '✓ ' : '✗ ') + (j.message || j.error));
   } catch (e) {
     showStatus(false, '✗ ' + e.message);
@@ -586,6 +616,115 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ---- Batch print (enter many items, print 4 per label) ----
+let batchItems = [];
+const batchModal = $('#batchModal');
+const batchName = $('#batchName'), batchBarcode = $('#batchBarcode');
+const batchListEl = $('#batchList'), batchSummaryEl = $('#batchSummary');
+
+function openBatch() {
+  batchName.value = '';
+  batchBarcode.value = '';
+  renderBatch();
+  batchModal.removeAttribute('hidden');
+  batchName.focus();
+}
+function closeBatch() { batchModal.setAttribute('hidden', ''); }
+
+function addBatchItem() {
+  const name = batchName.value.trim();
+  const barcode = batchBarcode.value.trim();
+  if (!name && !barcode) return; // nothing to add
+  batchItems.push({ name, barcode });
+  batchName.value = '';
+  batchBarcode.value = '';
+  renderBatch();
+  batchName.focus();
+}
+
+function renderBatch() {
+  if (!batchItems.length) {
+    batchListEl.innerHTML = '<div class="batch-empty">No items yet. Add your first one above.</div>';
+  } else {
+    batchListEl.innerHTML = batchItems.map((it, i) => `
+      <div class="batch-item">
+        <span class="bi-num">${i + 1}</span>
+        <input class="bi-name" data-edit="name" data-i="${i}" value="${esc(it.name)}" placeholder="(no name)" />
+        <input class="bi-code" data-edit="barcode" data-i="${i}" value="${esc(it.barcode)}" placeholder="(no barcode)" />
+        <button class="bi-del" data-del="${i}" title="Remove">&times;</button>
+      </div>`).join('');
+    // Live-edit a row's name/barcode straight in the list. Update the model only
+    // (no re-render) so the field keeps focus while you type.
+    batchListEl.querySelectorAll('[data-edit]').forEach((input) =>
+      input.addEventListener('input', () => {
+        batchItems[Number(input.dataset.i)][input.dataset.edit] = input.value.trim();
+      }));
+    batchListEl.querySelectorAll('[data-del]').forEach((b) =>
+      b.addEventListener('click', () => {
+        batchItems.splice(Number(b.dataset.del), 1);
+        renderBatch();
+      }));
+  }
+  const n = batchItems.length;
+  const labels = Math.ceil(n / 4);
+  batchSummaryEl.textContent = n
+    ? `${n} item${n === 1 ? '' : 's'} → ${labels} label${labels === 1 ? '' : 's'} (4 per label).`
+    : '';
+}
+
+async function printBatch(btn) {
+  addBatchItem(); // fold in anything typed but not yet added
+  const items = batchItems.filter((it) => it.name || it.barcode);
+  if (!items.length) { showStatus(false, 'Add at least one item first.'); return; }
+  if (!ipEl.value.trim()) { showStatus(false, 'Enter the printer IP address first.'); return; }
+
+  const pages = [];
+  for (let i = 0; i < items.length; i += 4) pages.push(items.slice(i, i + 4));
+
+  const original = btn.textContent;
+  btn.disabled = true;
+  for (let p = 0; p < pages.length; p++) {
+    btn.textContent = `Printing ${p + 1}/${pages.length}…`;
+    try {
+      const j = await postPrint(withPrintSettings(buildItems4UpZpl(pages[p])));
+      if (!j.ok) {
+        showStatus(false, `✗ Label ${p + 1}: ${j.message || j.error}`);
+        btn.disabled = false; btn.textContent = original;
+        return;
+      }
+    } catch (e) {
+      showStatus(false, `✗ Label ${p + 1}: ${e.message}`);
+      btn.disabled = false; btn.textContent = original;
+      return;
+    }
+  }
+  btn.disabled = false; btn.textContent = original;
+  showStatus(true, `✓ Printed ${items.length} item(s) across ${pages.length} label(s).`);
+  batchItems = [];
+  closeBatch();
+}
+
+$('#batchBtn').addEventListener('click', openBatch);
+$('#batchAdd').addEventListener('click', addBatchItem);
+$('#batchClose').addEventListener('click', closeBatch);
+$('#batchClearAll').addEventListener('click', () => {
+  if (batchItems.length && !confirm('Clear all items from the list?')) return;
+  batchItems = [];
+  renderBatch();
+  batchName.focus();
+});
+$('#batchPrint').addEventListener('click', (e) => printBatch(e.target));
+// Enter to move name → barcode → add next; Escape closes the modal.
+batchName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); batchBarcode.focus(); }
+});
+batchBarcode.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addBatchItem(); }
+});
+batchModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBatch(); });
+// Click the dimmed backdrop (outside the dialog) to close.
+batchModal.addEventListener('pointerdown', (e) => { if (e.target === batchModal) closeBatch(); });
 
 // ---- Boot with a blank label ----
 applyLabelSize();
