@@ -67,6 +67,12 @@ if (!gotLock) {
     Menu.setApplicationMenu(null);
     mainWindow.once('ready-to-show', () => mainWindow.show());
     mainWindow.on('closed', () => { mainWindow = null; });
+    // Electron on Windows can leave the page without keyboard focus after a
+    // native dialog (typing silently goes nowhere). The page no longer opens
+    // any, but hand focus back to it whenever the window is focused anyway.
+    mainWindow.on('focus', () => {
+      if (mainWindow && !mainWindow.webContents.isFocused()) mainWindow.webContents.focus();
+    });
 
     // Any target="_blank" / external link opens in the system browser.
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {

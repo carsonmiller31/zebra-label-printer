@@ -22,6 +22,72 @@ function snapVal(v) {
   return snapEnabled ? Math.round(v / gridSize) * gridSize : Math.round(v);
 }
 
+// ---- In-page confirm dialog ----
+// Never use window.confirm()/alert() in this app. In Electron (notably on
+// Windows) a native dialog leaves the page unable to take typing afterwards —
+// every text box looks fine but ignores the keyboard until the window loses
+// and regains focus. This does the same job inside the page.
+// Resolves true for OK, false for Cancel / Escape / clicking the backdrop.
+function askConfirm(message, { ok = 'OK', cancel = 'Cancel', detail = [] } = {}) {
+  return new Promise((resolve) => {
+    const returnFocus = document.activeElement;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay confirm-overlay';
+    const box = document.createElement('div');
+    box.className = 'modal confirm';
+    box.setAttribute('role', 'alertdialog');
+    box.setAttribute('aria-modal', 'true');
+    const title = document.createElement('h2');
+    title.id = 'confirmTitle';
+    title.textContent = message;
+    box.setAttribute('aria-labelledby', title.id);
+    box.append(title);
+    if (detail.length) {
+      const list = document.createElement('ul');
+      list.className = 'confirm-list';
+      for (const line of detail) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        list.append(li);
+      }
+      box.append(list);
+    }
+    const btns = document.createElement('div');
+    btns.className = 'btns';
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.textContent = ok;
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'secondary';
+    cancelBtn.textContent = cancel;
+    btns.append(okBtn, cancelBtn);
+    box.append(btns);
+    overlay.append(box);
+
+    const close = (answer) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey, true);
+      if (returnFocus && document.contains(returnFocus)) returnFocus.focus();
+      resolve(answer);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); }
+      else if (e.key === 'Tab') {
+        // Keep focus on the two buttons while the dialog is open.
+        e.preventDefault();
+        (document.activeElement === okBtn ? cancelBtn : okBtn).focus();
+      }
+    };
+    okBtn.addEventListener('click', () => close(true));
+    cancelBtn.addEventListener('click', () => close(false));
+    overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) close(false); });
+    document.addEventListener('keydown', onKey, true);
+    document.body.append(overlay);
+    okBtn.focus();
+  });
+}
+
 // ---- Connection persistence ----
 const ipEl = $('#ip'), portEl = $('#port');
 ipEl.value = localStorage.getItem('zebra_ip') || '192.168.0.95';
@@ -109,8 +175,8 @@ function items4UpLayout() {
 
 // Item Label: four independent barcode+name units laid out 2×2 to fill the label,
 // so one print produces four small item labels.
-function applyItemLabel4Up() {
-  if (elements.length && !confirm('Replace the current label with the Item Label (4-up) template?')) return;
+async function applyItemLabel4Up() {
+  if (elements.length && !(await askConfirm('Replace the current label with the Item Label (4-up) template?', { ok: 'Replace' }))) return;
   elements = [];
   selectedId = null;
 
@@ -533,8 +599,8 @@ $('#deleteBtn').addEventListener('click', () => {
   selectedId = null;
   render();
 });
-$('#clearBtn').addEventListener('click', () => {
-  if (elements.length && !confirm('Remove all elements?')) return;
+$('#clearBtn').addEventListener('click', async () => {
+  if (elements.length && !(await askConfirm('Remove all elements?', { ok: 'Remove all' }))) return;
   elements = [];
   selectedId = null;
   render();
@@ -710,8 +776,8 @@ async function printBatch(btn) {
 $('#batchBtn').addEventListener('click', openBatch);
 $('#batchAdd').addEventListener('click', addBatchItem);
 $('#batchClose').addEventListener('click', closeBatch);
-$('#batchClearAll').addEventListener('click', () => {
-  if (batchItems.length && !confirm('Clear all items from the list?')) return;
+$('#batchClearAll').addEventListener('click', async () => {
+  if (batchItems.length && !(await askConfirm('Clear all items from the list?', { ok: 'Clear list' }))) return;
   batchItems = [];
   renderBatch();
   batchName.focus();

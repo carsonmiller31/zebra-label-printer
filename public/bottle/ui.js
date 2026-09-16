@@ -305,29 +305,49 @@
 
   async function print() {
     if (printing) return;
+    // Held for the whole attempt, including the confirm dialog, so a second
+    // Enter can't start a second print.
+    printing = true;
+    try {
+      await printNow();
+    } finally {
+      printing = false;
+      ui.print.disabled = false;
+      ui.print.textContent = 'Print Label';
+      render();
+    }
+  }
+
+  async function printNow() {
+    ui.print.disabled = true;
     // A scan and Enter can beat the FDA; don't print a label without its drug.
     if (pending) {
       ui.print.textContent = 'Looking up…';
       try { await pending; } catch { /* reported by lookup() */ }
-      ui.print.textContent = 'Print Label';
     }
     const c = current();
     if (!c.cells) {
       showStatus(false, `✗ ${c.blockers[0] || 'Enter the NDC first.'}`);
       return;
     }
-    if (!f.name.value.trim() && !confirm('There is no drug name on this label. Print it anyway?')) return;
-    if (c.exp && c.exp.expired && !confirm('This expiration date has already passed. Print anyway?')) return;
-    if ((!c.lot || !c.exp) && !confirm(`This label has no ${!c.lot && !c.exp ? 'lot or expiration' : !c.lot ? 'lot number' : 'expiration date'}. Print anyway?`)) return;
     if (!ipEl.value.trim()) {
       showStatus(false, '✗ Set the printer IP address under Printer Connection first.');
       return;
     }
 
+    const doubts = [];
+    if (!f.name.value.trim()) doubts.push('There is no drug name.');
+    if (c.exp && c.exp.expired) doubts.push('The expiration date has already passed.');
+    if (!c.lot && !c.exp) doubts.push('There is no lot number or expiration date.');
+    else if (!c.lot) doubts.push('There is no lot number.');
+    else if (!c.exp) doubts.push('There is no expiration date.');
+    if (doubts.length) {
+      ui.print.textContent = 'Print Label';
+      const go = await askConfirm('Print this label anyway?', { ok: 'Print anyway', detail: doubts });
+      if (!go) return;
+    }
+
     const copies = Math.max(1, Math.min(99, Math.floor(Number(f.copies.value) || 1)));
-    printing = true;
-    const original = ui.print.textContent;
-    ui.print.disabled = true;
     ui.print.textContent = 'Printing…';
     try {
       const j = await postPrint(withPrintSettings(BottleLayout.toZPL(c.layout, c.spec, copies)));
@@ -347,10 +367,6 @@
       scanWarning = '';
     } catch (e) {
       showStatus(false, `✗ ${e.message}`);
-    } finally {
-      printing = false;
-      ui.print.textContent = original;
-      render();
     }
   }
 
