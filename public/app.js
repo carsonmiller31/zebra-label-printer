@@ -67,6 +67,8 @@ function applyLabelSize() {
   }
   render();
   fitZoom();
+  // The Bottle Label tab lays itself out from the same stock settings.
+  document.dispatchEvent(new CustomEvent('labelsize'));
 }
 [labelWEl, labelHEl, dpiEl].forEach((el) => el.addEventListener('input', applyLabelSize));
 

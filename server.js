@@ -91,8 +91,26 @@ const STATIC_TYPES = {
   '.ico': 'image/x-icon',
 };
 
+// Third-party browser scripts served straight out of node_modules, so the
+// packaged app carries exactly the version in package-lock.json. Explicit
+// allowlist — nothing else under node_modules is reachable.
+const VENDOR = {
+  // The package's "exports" map hides dist/ files, but its entry point lives
+  // in that same folder.
+  '/vendor/bwip-js.js': () =>
+    path.join(path.dirname(require.resolve('bwip-js')), 'bwip-js-min.js'),
+};
+
 function serveStatic(req, res) {
   let urlPath = req.url.split('?')[0];
+  if (VENDOR[urlPath]) {
+    fs.readFile(VENDOR[urlPath](), (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      res.end(data);
+    });
+    return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
 
   const filePath = path.join(PUBLIC_DIR, path.normalize(urlPath));

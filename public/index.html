@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zebra GX420d Label Designer</title>
+  <title>Zebra Label Printer</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Zebra GX420d Label Designer</h1>
-      <p>Design custom labels and print them to your printer over the network.</p>
+      <h1>Zebra Label Printer</h1>
+      <p>Print bottle labels from an NDC, or design your own labels.</p>
     </header>
 
     <!-- Connection -->
@@ -43,7 +43,7 @@
       <div id="status" class="status"></div>
     </div>
 
-    <!-- Designer -->
+    <!-- Label stock: shared by both tabs -->
     <div class="card">
       <h2>Label Setup</h2>
       <div class="row" style="margin-bottom:20px;">
@@ -67,8 +67,117 @@
           <button class="secondary small" id="borderBtn" style="width:100%;">Print Border Test</button>
         </div>
       </div>
-      <div class="hint" id="dotsInfo" style="margin-top:-12px; margin-bottom:16px;"></div>
+      <div class="hint" id="dotsInfo" style="margin-top:-12px;"></div>
+    </div>
 
+    <nav class="tabs" role="tablist" aria-label="Label type">
+      <button type="button" role="tab" class="tab" id="tab-bottle" data-tab="bottle" aria-controls="panel-bottle">Bottle Label</button>
+      <button type="button" role="tab" class="tab" id="tab-designer" data-tab="designer" aria-controls="panel-designer">Label Designer</button>
+    </nav>
+
+    <!-- Bottle label: NDC + lot + expiry + serial → GS1 DataMatrix label -->
+    <section class="card bottle" id="panel-bottle" role="tabpanel" aria-labelledby="tab-bottle" hidden>
+      <div class="bottle-grid">
+        <div class="bottle-form">
+          <div class="field">
+            <label for="bNdc">NDC <span class="opt">— type it, or scan the bottle's barcode</span></label>
+            <div class="ndc-row">
+              <input id="bNdc" class="mono big" type="text" autocomplete="off" spellcheck="false" placeholder="0093-7180-56" />
+              <button type="button" class="secondary" id="bLookup">Look up</button>
+            </div>
+            <div id="bNdcStatus" class="lookup" aria-live="polite"></div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="bLot">Lot</label>
+              <input id="bLot" class="mono" type="text" autocomplete="off" spellcheck="false" />
+              <div class="hint err-text" id="bLotHint"></div>
+            </div>
+            <div>
+              <label for="bExp">Expiration</label>
+              <input id="bExp" type="text" autocomplete="off" spellcheck="false" placeholder="03/2027" />
+              <div class="hint" id="bExpHint"></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="bSerial">Serial number <span class="opt">— if the bottle has one</span></label>
+            <input id="bSerial" class="mono" type="text" autocomplete="off" spellcheck="false" />
+            <div class="hint err-text" id="bSerialHint"></div>
+          </div>
+
+          <fieldset class="drug">
+            <legend>Drug details <span class="opt">— filled in from the FDA; edit anything</span></legend>
+            <div class="field">
+              <label for="bName">Drug name</label>
+              <input id="bName" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="bGeneric">Generic name <span class="opt">— when the name above is a brand</span></label>
+              <input id="bGeneric" type="text" autocomplete="off" />
+            </div>
+            <div class="row">
+              <div>
+                <label for="bStrength">Strength</label>
+                <input id="bStrength" type="text" autocomplete="off" placeholder="40 mg" />
+              </div>
+              <div>
+                <label for="bForm">Dosage form</label>
+                <input id="bForm" type="text" autocomplete="off" placeholder="Tablet" />
+              </div>
+            </div>
+            <div class="row">
+              <div style="flex:2;">
+                <label for="bSize">Package</label>
+                <input id="bSize" type="text" autocomplete="off" placeholder="Bottle of 90 tablets" />
+              </div>
+              <div>
+                <label for="bSchedule">DEA schedule</label>
+                <select id="bSchedule">
+                  <option value="">Not controlled</option>
+                  <option value="CII">CII</option>
+                  <option value="CIII">CIII</option>
+                  <option value="CIV">CIV</option>
+                  <option value="CV">CV</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="bLabeler">Manufacturer</label>
+              <input id="bLabeler" type="text" autocomplete="off" />
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="bottle-side">
+          <div class="preview-stage">
+            <div id="bPreview" class="preview-label" aria-label="Label preview"></div>
+          </div>
+          <div class="hint" id="bSizeInfo"></div>
+          <div class="encoded" id="bEncoded"></div>
+          <ul class="notes" id="bNotes"></ul>
+
+          <div class="print-row">
+            <div class="copies">
+              <label for="bCopies">Copies</label>
+              <input id="bCopies" type="number" min="1" max="99" value="1" />
+            </div>
+            <button type="button" id="bPrint">Print Label</button>
+            <button type="button" class="secondary" id="bClear">New Bottle</button>
+          </div>
+          <div id="bStatus" class="status" aria-live="polite"></div>
+          <details class="zpl-details">
+            <summary>Show ZPL</summary>
+            <textarea id="bZpl" spellcheck="false" readonly></textarea>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Designer -->
+    <section id="panel-designer" role="tabpanel" aria-labelledby="tab-designer" hidden>
+    <div class="card">
       <div class="designer">
         <!-- Tools -->
         <div class="tool-col">
@@ -127,6 +236,7 @@
       <textarea id="zpl" spellcheck="false" readonly></textarea>
       <div class="hint">This ZPL is generated from your design and sent to the printer.</div>
     </div>
+    </section>
   </div>
 
   <!-- Batch print: enter item name + barcode repeatedly, print 4 per label -->
@@ -164,5 +274,10 @@
   <script src="/qrcode.js"></script>
   <script src="/barcode128.js"></script>
   <script src="/app.js"></script>
+  <script src="/vendor/bwip-js.js"></script>
+  <script src="/bottle/ndc.js"></script>
+  <script src="/bottle/gs1.js"></script>
+  <script src="/bottle/layout.js"></script>
+  <script src="/bottle/ui.js"></script>
 </body>
 </html>
