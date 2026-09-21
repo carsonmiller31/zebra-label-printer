@@ -10,9 +10,11 @@
  *   (17) expiry    YYMMDD — DD of 00 means "end of that month"
  *   (10) lot       up to 20 characters
  *   (21) serial    up to 20 characters
+ *   (30) quantity  how many are in the bottle, up to 8 digits
  *
- * Lot and serial are variable length, so a separator (FNC1) has to follow any
- * of them that isn't last. That is why the fixed-length fields go first.
+ * Lot, serial and quantity are variable length, so a separator (FNC1) has to
+ * follow any of them that isn't last. That is why the fixed-length fields go
+ * first and the quantity goes last.
  */
 var GS1 = (function () {
   /** GS1 mod-10 check digit for a string of digits (weights 3,1,3… from the right). */
@@ -115,6 +117,23 @@ var GS1 = (function () {
     return '';
   }
 
+  /**
+   * Quantity — what's actually in the bottle. AI (30) counts whole items, so
+   * that is all this takes: the unit ("tablets", "mL") is already on the label
+   * in the dosage form. Returns an error message, or '' when it can go in.
+   */
+  function checkQuantity(value) {
+    if (!value) return '';
+    if (!/^\d+$/.test(value)) return 'Quantity should be a whole number, like 90.';
+    if (Number(value) === 0) return 'Quantity should be more than zero.';
+    if (stripZeros(value).length > 8) return 'Quantity is more digits than the barcode can hold.';
+    return '';
+  }
+
+  /** "090" → "90"; what AI (30) and the label should both show. */
+  const stripZeros = (value) =>
+    /^\d+$/.test(value || '') ? String(Number(value)) : String(value || '').trim();
+
   // ---- Building the code -------------------------------------------------
 
   /**
@@ -123,17 +142,19 @@ var GS1 = (function () {
    *           leading FNC1 is what makes the symbol GS1 DataMatrix.
    *   hri   — the human-readable "(01)…(17)…" form, for the screen.
    */
-  function elementString({ gtin, ai17, lot, serial }) {
+  function elementString({ gtin, ai17, lot, serial, qty }) {
     if (!gtin) return null;
     const fields = [['01', gtin]];
     if (ai17) fields.push(['17', ai17]);
     if (lot) fields.push(['10', lot]);
     if (serial) fields.push(['21', serial]);
+    // Last, so its separator is the end of the code rather than an extra FNC1.
+    if (qty) fields.push(['30', stripZeros(qty)]);
 
     let data = '^FNC1';
     fields.forEach(([ai, value], i) => {
       data += ai + value;
-      const variable = ai === '10' || ai === '21';
+      const variable = ai === '10' || ai === '21' || ai === '30';
       if (variable && i < fields.length - 1) data += '^FNC1';
     });
     const hri = fields.map(([ai, value]) => `(${ai})${value}`).join('');
@@ -159,7 +180,7 @@ var GS1 = (function () {
 
   /**
    * Parse a GS1 element string from a keyboard-wedge scanner. Returns
-   * { gtin, ai17, lot, serial, warning }.
+   * { gtin, ai17, lot, serial, qty, warning }.
    *
    * Many scanners drop the invisible separator between variable fields, which
    * makes "lot then serial" impossible to split for certain. When that happens
@@ -211,6 +232,7 @@ var GS1 = (function () {
       ai17: out['17'] || '',
       lot: out['10'] || '',
       serial: out['21'] || '',
+      qty: /^\d{1,8}$/.test(out['30'] || '') ? stripZeros(out['30']) : '',
       warning: out.warning
         ? "The scanner didn't send the separator between fields — check that the lot and serial split correctly."
         : '',
@@ -220,7 +242,7 @@ var GS1 = (function () {
   return {
     checkDigit, gtinFromNdc10, validGtin,
     parseExpiry, expiryFromAi17,
-    checkText, elementString,
+    checkText, checkQuantity, stripZeros, elementString,
     looksLikeScan, parseScan,
   };
 })();

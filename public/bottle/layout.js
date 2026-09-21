@@ -26,7 +26,7 @@ var BottleLayout = (function () {
 
   /**
    * input: { name, generic, strength, dosageForm, size, labeler, schedule,
-   *          ndc, lot, exp, serial, cells }   (cells = boolean[][] or null)
+   *          ndc, qty, lot, exp, serial, cells }   (cells = boolean[][] or null)
    * spec:  { W, H, dpi }   label size in dots
    * → { elements, notes }
    */
@@ -103,14 +103,25 @@ var BottleLayout = (function () {
 
   const subLine = (input) => [input.strength, input.dosageForm].filter(Boolean).join(' \u00b7 ');
 
-  /** Key/value rows ("NDC  0093-7180-56") with a shared value size. */
+  /**
+   * Key/value rows ("NDC  0093-7180-56") with a shared value size. The count
+   * in the bottle sits under the NDC — what it is, then how many — ahead of
+   * the lot/expiry/serial the code is tracked by.
+   */
   function fieldRows(input) {
     const rows = [['NDC', input.ndc || '—']];
+    if (input.qty) rows.push(['QTY', input.qty]);
     if (input.lot) rows.push(['LOT', input.lot]);
     if (input.exp) rows.push(['EXP', input.exp]);
     if (input.serial) rows.push(['SN', input.serial]);
     return rows;
   }
+
+  /** On a small label these pairs may share a line, when they both fit. */
+  const PAIRS = { NDC: 'QTY', LOT: 'EXP' };
+
+  const ROW_NAMES = { SN: 'serial number', QTY: 'quantity', NDC: 'NDC' };
+  const rowName = (key) => ROW_NAMES[key] || key.toLowerCase();
 
   function standardLayout(input, spec, k) {
     const ctx = context(spec);
@@ -185,7 +196,7 @@ var BottleLayout = (function () {
       textLine(els, fx, base, kh, key);
       const v = valueWidth(value, vh) <= valueW ? { lines: [value] } : fit(value, valueW, 1, vh, vh);
       valueLine(els, fx + keyW, base, vh, v.lines[0]);
-      if (v.truncated) notes.push(`The ${key === 'SN' ? 'serial number' : key.toLowerCase()} was cut off — it's too long for this label.`);
+      if (v.truncated) notes.push(`The ${rowName(key)} was cut off — it's too long for this label.`);
       base += pitch * vh;
     }
 
@@ -236,8 +247,8 @@ var BottleLayout = (function () {
     for (const seg of segments) {
       const line = lines[lines.length - 1];
       const used = line ? line.reduce((sum, s) => sum + s.w + gap, 0) : Infinity;
-      // NDC and serial get lines of their own; lot and expiry may share one.
-      const shareable = line && line.every((s) => s.key === 'LOT') && seg.key === 'EXP';
+      // Most fields get a line of their own; NDC+QTY and LOT+EXP may pair up.
+      const shareable = line && line.length === 1 && PAIRS[line[0].key] === seg.key;
       if (shareable && used + seg.w <= colW) line.push(seg);
       else lines.push([seg]);
     }
@@ -250,7 +261,7 @@ var BottleLayout = (function () {
         const v = valueWidth(seg.value, vh) <= x1 - vx ? { lines: [seg.value] } : fit(seg.value, x1 - vx, 1, vh, vh);
         valueLine(els, vx, base, vh, v.lines[0]);
         if (v.truncated) {
-          notes.push(`The ${seg.key === 'SN' ? 'serial number' : seg.key.toLowerCase()} was cut off.`);
+          notes.push(`The ${rowName(seg.key)} was cut off.`);
           fits = false;
         }
         x += seg.w + gap;

@@ -2,10 +2,13 @@
 /*
  * The Bottle Label tab.
  *
- * Flow at the counter: type (or scan) the NDC → the FDA fills in the drug →
- * type the lot, expiration and serial → Print. Enter moves to the next field,
- * and Enter in the serial box prints, so a run of bottles is: scan/type the
- * serial, Enter, next.
+ * Flow at the counter: scan the bottle (or type the NDC) → the FDA fills in
+ * the drug → check the lot, expiration, quantity and serial → Print. Enter
+ * moves to the next field, and Enter in the serial box prints, so a run of
+ * bottles is: scan/type the serial, Enter, next.
+ *
+ * A scan is caught anywhere on this tab, whichever box the cursor is in — see
+ * wedge.js — and fills every field the barcode carries at once.
  *
  * Uses from app.js: LABEL_W, LABEL_H, dpiEl, ipEl, postPrint(),
  * withPrintSettings(), askConfirm().
@@ -13,14 +16,16 @@
 (function () {
   const $ = (sel) => document.querySelector(sel);
   const f = {
-    ndc: $('#bNdc'), lot: $('#bLot'), exp: $('#bExp'), serial: $('#bSerial'),
+    ndc: $('#bNdc'), lot: $('#bLot'), exp: $('#bExp'), qty: $('#bQty'), serial: $('#bSerial'),
     name: $('#bName'), generic: $('#bGeneric'), strength: $('#bStrength'),
     form: $('#bForm'), size: $('#bSize'), schedule: $('#bSchedule'),
     labeler: $('#bLabeler'), copies: $('#bCopies'),
   };
   const ui = {
-    ndcStatus: $('#bNdcStatus'), lookupBtn: $('#bLookup'),
+    panel: $('#panel-bottle'), ndcStatus: $('#bNdcStatus'), lookupBtn: $('#bLookup'),
+    scanNote: $('#bScanNote'),
     lotHint: $('#bLotHint'), expHint: $('#bExpHint'), serialHint: $('#bSerialHint'),
+    qtyHint: $('#bQtyHint'), qtySuggest: $('#bQtySuggest'),
     preview: $('#bPreview'), sizeInfo: $('#bSizeInfo'), encoded: $('#bEncoded'),
     notes: $('#bNotes'), print: $('#bPrint'), clear: $('#bClear'),
     status: $('#bStatus'), zpl: $('#bZpl'),
@@ -88,21 +93,77 @@
 
   // ---- Scanning -----------------------------------------------------------
 
-  /** Fill everything from a bottle's 2D code. Returns false if it wasn't one. */
+  let scanNote = '';   // what the last scan filled in, shown under the NDC
+
+  /**
+   * Does this text come off a barcode rather than a keyboard? A bottle's
+   * square code says so in its own structure. Its plain linear barcode is
+   * only digits — and so is many a lot number — so that one is trusted only
+   * when the characters arrived at scanner speed.
+   */
+  function isScan(text, { fast = true } = {}) {
+    if (GS1.looksLikeScan(text)) return true;
+    return fast && /^\d{10,16}$/.test(text) && !!NDC.embeddedNdc10(text);
+  }
+
+  /** Draw the eye to a box a scan just filled. */
+  function flash(el) {
+    el.classList.remove('flash');
+    void el.offsetWidth; // let the animation start over
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1100);
+  }
+
+  /**
+   * Fill the form from a scan. Returns the list of what it filled (empty when
+   * the barcode held nothing usable), or null when it wasn't a barcode.
+   */
   function applyScan(raw) {
-    if (!GS1.looksLikeScan(raw)) return false;
-    const scan = GS1.parseScan(raw);
+    const text = String(raw == null ? '' : raw).trim();
+    if (!isScan(text)) return null;
+
+    const filled = [];
+    const set = (el, value, label) => {
+      if (!value) return;
+      el.value = value;
+      filled.push(label);
+      flash(el);
+    };
+
+    // A linear barcode: the NDC and nothing else.
+    if (!GS1.looksLikeScan(text)) {
+      scanWarning = '';
+      set(f.ndc, NDC.embeddedNdc10(text), 'NDC');
+      return filled;
+    }
+
+    const scan = GS1.parseScan(text);
     const ndc10 = scan.gtin && NDC.embeddedNdc10(scan.gtin);
     if (!ndc10 || !GS1.validGtin(scan.gtin)) {
+      scanNote = '';
       showStatus(false, "That barcode doesn't hold an NDC — type the NDC instead.");
-      return true;
+      return [];
     }
-    f.ndc.value = ndc10;
-    if (scan.lot) f.lot.value = scan.lot;
-    if (scan.ai17) f.exp.value = GS1.expiryFromAi17(scan.ai17) || '';
-    if (scan.serial) f.serial.value = scan.serial;
+    set(f.ndc, ndc10, 'NDC');
+    set(f.lot, scan.lot, 'lot');
+    set(f.exp, scan.ai17 ? GS1.expiryFromAi17(scan.ai17) || '' : '', 'expiration');
+    set(f.serial, scan.serial, 'serial');
+    set(f.qty, scan.qty, 'quantity');
     scanWarning = scan.warning;
-    return true;
+    return filled;
+  }
+
+  /** A scan caught anywhere on the tab. */
+  function onScan(text) {
+    const filled = applyScan(text);
+    if (!filled) return;
+    if (filled.length) {
+      scanNote = `Scanned — ${filled.join(', ')} filled in.`;
+      ui.status.className = 'status';
+      lookup(false);
+      nextEmpty().focus();
+    }
+    render();
   }
 
   // ---- Model --------------------------------------------------------------
@@ -123,9 +184,11 @@
 
     const lot = f.lot.value.trim();
     const serial = f.serial.value.trim();
+    const qty = GS1.stripZeros(f.qty.value.trim());
     const exp = GS1.parseExpiry(f.exp.value);
     const lotError = GS1.checkText(lot, 'Lot');
     const serialError = GS1.checkText(serial, 'Serial number');
+    const qtyError = GS1.checkQuantity(f.qty.value.trim());
     const blockers = [];
 
     let gtin = null;
@@ -141,12 +204,13 @@
     }
     if (lotError) blockers.push(lotError);
     if (serialError) blockers.push(serialError);
+    if (qtyError) blockers.push(qtyError);
     if (exp && exp.error) blockers.push(`Expiration: ${exp.error}`);
 
     let code = null;
     let cells = null;
-    if (gtin && !lotError && !serialError && !(exp && exp.error)) {
-      code = GS1.elementString({ gtin, ai17: exp ? exp.ai17 : '', lot, serial });
+    if (gtin && !lotError && !serialError && !qtyError && !(exp && exp.error)) {
+      code = GS1.elementString({ gtin, ai17: exp ? exp.ai17 : '', lot, serial, qty });
       try {
         cells = BottleLayout.encodeMatrix(bwipjs, code.data);
       } catch (e) {
@@ -164,13 +228,17 @@
       labeler: f.labeler.value.trim(),
       schedule: f.schedule.value,
       ndc: ndc && !ndc.error ? ndc.display || ndc.ndc10 || ndc.ndc11 : raw,
+      qty: qtyError ? '' : qty,
       lot,
       exp: exp && !exp.error ? exp.display : '',
       serial,
       cells,
     }, s);
 
-    return { raw, ndc, confirmed, lot, serial, exp, lotError, serialError, blockers, code, cells, layout, spec: s };
+    return {
+      raw, ndc, confirmed, lot, serial, qty, exp,
+      lotError, serialError, qtyError, blockers, code, cells, layout, spec: s,
+    };
   }
 
   // ---- Render -------------------------------------------------------------
@@ -221,9 +289,24 @@
       st.textContent = "Couldn't reach the FDA directory. Type the drug details below, or press Look up to try again.";
     }
 
+    // What the last scan filled in
+    ui.scanNote.textContent = scanNote;
+    ui.scanNote.hidden = !scanNote;
+
     // Field hints
     setLine(ui.lotHint, c.lotError);
     setLine(ui.serialHint, c.serialError);
+    setLine(ui.qtyHint, c.qtyError);
+
+    // The full-package count from the FDA, offered while the box is empty.
+    const suggestion = lookupState === 'found' && facts && lookedUp === c.raw && !c.qty
+      ? NDC.packageCount(facts.packageDescription)
+      : null;
+    ui.qtySuggest.hidden = !suggestion;
+    if (suggestion) {
+      ui.qtySuggest.textContent = `Full package: ${suggestion.label}`;
+      ui.qtySuggest.dataset.count = suggestion.count;
+    }
     if (c.exp && c.exp.error) setLine(ui.expHint, c.exp.error, 'err');
     else if (c.exp) setLine(ui.expHint, c.exp.expired ? `${c.exp.long} — already expired` : c.exp.long, c.exp.expired ? 'err' : '');
     else setLine(ui.expHint, '');
@@ -252,6 +335,14 @@
       if (!c.exp) notes.push({ text: 'No expiration date entered.', tone: 'warn' });
     }
     if (c.exp && c.exp.expired) notes.push({ text: 'This expiration date has already passed.', tone: 'err' });
+    // "Bottle of 100 tablets" over "QTY 30" is two answers to the same question.
+    const packCount = (f.size.value.match(/\d+/) || [])[0];
+    if (c.qty && packCount && Number(packCount) !== Number(c.qty)) {
+      notes.push({
+        text: `The package line still says ${packCount} — clear it if this bottle holds ${c.qty}.`,
+        tone: 'warn',
+      });
+    }
     if (scanWarning) notes.push({ text: scanWarning, tone: 'warn' });
     if (c.raw && !f.name.value.trim() && lookupState !== 'loading') {
       notes.push({ text: 'No drug name yet.', tone: 'warn' });
@@ -355,6 +446,7 @@
     lookedUp = '';
     lookupState = 'idle';
     scanWarning = '';
+    scanNote = '';
     ui.status.className = 'status';
     render();
     f.ndc.focus();
@@ -362,25 +454,40 @@
 
   // ---- Events -------------------------------------------------------------
 
-  const nextEmpty = () => [f.lot, f.exp, f.serial].find((el) => !el.value.trim()) || ui.print;
+  const nextEmpty = () => [f.lot, f.exp, f.qty, f.serial].find((el) => !el.value.trim()) || ui.print;
+
+  // A scan anywhere on the tab — whichever box the cursor was in, or none.
+  Wedge.capture({
+    active: () => !ui.panel.hidden && !document.querySelector('.modal-overlay:not([hidden])'),
+    isScan,
+    onScan,
+  });
+
+  /** A barcode that went into the NDC box itself, or was pasted there. */
+  function scanFromBox() {
+    const filled = applyScan(f.ndc.value);
+    if (filled && filled.length) scanNote = `Scanned — ${filled.join(', ')} filled in.`;
+    return !!filled;
+  }
 
   f.ndc.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    const scanned = applyScan(f.ndc.value);
+    const scanned = scanFromBox();
     lookup(false);
     (scanned ? nextEmpty() : f.lot).focus();
   });
   f.ndc.addEventListener('change', () => {
-    applyScan(f.ndc.value);
+    scanFromBox();
     lookup(false);
   });
   f.ndc.addEventListener('input', () => {
     scanWarning = '';
+    scanNote = '';
     render();
   });
   ui.lookupBtn.addEventListener('click', () => {
-    applyScan(f.ndc.value);
+    scanFromBox();
     lookup(true);
   });
 
@@ -388,10 +495,19 @@
     if (e.key === 'Enter') { e.preventDefault(); f.exp.focus(); }
   });
   f.exp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); f.qty.focus(); }
+  });
+  f.qty.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); f.serial.focus(); }
   });
   f.serial.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); print(); }
+  });
+
+  ui.qtySuggest.addEventListener('click', () => {
+    f.qty.value = ui.qtySuggest.dataset.count || '';
+    flash(f.qty);
+    render();
   });
 
   for (const el of Object.values(f)) {

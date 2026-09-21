@@ -81,11 +81,12 @@
       <div class="bottle-grid">
         <div class="bottle-form">
           <div class="field">
-            <label for="bNdc">NDC <span class="opt">— type it, or scan the bottle's barcode</span></label>
+            <label for="bNdc">NDC <span class="opt">— or scan the bottle, anywhere on this tab</span></label>
             <div class="ndc-row">
               <input id="bNdc" class="mono big" type="text" autocomplete="off" spellcheck="false" placeholder="0093-7180-56" />
               <button type="button" class="secondary" id="bLookup">Look up</button>
             </div>
+            <div id="bScanNote" class="scan-note" hidden></div>
             <div id="bNdcStatus" class="lookup" aria-live="polite"></div>
           </div>
 
@@ -102,10 +103,18 @@
             </div>
           </div>
 
-          <div class="field">
-            <label for="bSerial">Serial number <span class="opt">— if the bottle has one</span></label>
-            <input id="bSerial" class="mono" type="text" autocomplete="off" spellcheck="false" />
-            <div class="hint err-text" id="bSerialHint"></div>
+          <div class="row">
+            <div style="flex:2;">
+              <label for="bSerial">Serial number <span class="opt">— if the bottle has one</span></label>
+              <input id="bSerial" class="mono" type="text" autocomplete="off" spellcheck="false" />
+              <div class="hint err-text" id="bSerialHint"></div>
+            </div>
+            <div>
+              <label for="bQty">Quantity <span class="opt">— in this bottle</span></label>
+              <input id="bQty" class="mono" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="90" />
+              <div class="hint err-text" id="bQtyHint"></div>
+              <button type="button" class="link-btn" id="bQtySuggest" hidden></button>
+            </div>
           </div>
 
           <fieldset class="drug">
@@ -342,6 +351,7 @@
   <script src="/app.js"></script>
   <script src="/labelcore.js"></script>
   <script src="/vendor/bwip-js.js"></script>
+  <script src="/bottle/wedge.js"></script>
   <script src="/bottle/ndc.js"></script>
   <script src="/bottle/gs1.js"></script>
   <script src="/bottle/layout.js"></script>

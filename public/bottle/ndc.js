@@ -265,9 +265,9 @@ var NDC = (function () {
   const baseWord = (s) => s.split(',')[0].trim().toUpperCase();
   const plural = (word, count) => (count === 1 || /s$/i.test(word) ? word : `${word}s`);
 
-  /** "90 TABLET in 1 BOTTLE" → "Bottle of 90 tablets"; "10 mL in 1 VIAL" → "10 mL vial". */
-  function packageSize(description) {
-    if (!description) return '';
+  /** The amount the FDA lists for a package: { amount, unit, container } or null. */
+  function packageParts(description) {
+    if (!description) return null;
     const parsed = description
       .replace(/\([\d-]+\)/g, '')
       .split('/')
@@ -276,9 +276,29 @@ var NDC = (function () {
       .map((segment) => /^([\d.]+)\s+(.+?)\s+in\s+\d+\s+(.+)$/.exec(segment))
       .filter(Boolean)
       .map((m) => ({ amount: m[1], unit: m[2], container: m[3] }));
-    if (!parsed.length) return '';
+    if (!parsed.length) return null;
+    return parsed.find((p) => !CONTAINERS.has(baseWord(p.unit))) || parsed[parsed.length - 1];
+  }
 
-    const chosen = parsed.find((p) => !CONTAINERS.has(baseWord(p.unit))) || parsed[parsed.length - 1];
+  /**
+   * What a full package holds, for the Quantity box: { count, label }, where
+   * count is a whole number of tablets (or mL). Null when the FDA's wording
+   * doesn't come down to one — a kit, say, or a fractional amount.
+   */
+  function packageCount(description) {
+    const chosen = packageParts(description);
+    if (!chosen) return null;
+    const count = Number(chosen.amount);
+    if (!Number.isInteger(count) || count <= 0 || count > 99999999) return null;
+    const measure = MEASURES.test(chosen.unit.trim());
+    const unit = measure ? chosen.unit.trim() : plural(tidy(baseWord(chosen.unit)).toLowerCase(), count);
+    return { count: String(count), label: `${count} ${unit}` };
+  }
+
+  /** "90 TABLET in 1 BOTTLE" → "Bottle of 90 tablets"; "10 mL in 1 VIAL" → "10 mL vial". */
+  function packageSize(description) {
+    const chosen = packageParts(description);
+    if (!chosen) return '';
     const container = tidy(baseWord(chosen.container)).toLowerCase();
     const count = Number(chosen.amount);
     if (MEASURES.test(chosen.unit.trim())) {
@@ -289,7 +309,7 @@ var NDC = (function () {
     return head ? `${head} of ${chosen.amount} ${form}` : `${chosen.amount} ${form}`;
   }
 
-  return { resolve, fromPackageNdc, isSearchable, lookup, packageSize, embeddedNdc10 };
+  return { resolve, fromPackageNdc, isSearchable, lookup, packageSize, packageCount, embeddedNdc10 };
 })();
 
 if (typeof module !== 'undefined') module.exports = NDC;

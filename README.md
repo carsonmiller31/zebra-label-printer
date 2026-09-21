@@ -27,21 +27,31 @@ tag, or **Label Designer** to lay out your own and click **Print This Label**.
 
 The **Bottle Label** tab prints a replacement label for a drug bottle:
 
-1. Type the NDC and press Enter, or scan the bottle's square barcode into
-   that box. The drug name, strength, form, package, manufacturer and DEA
-   schedule fill in from the FDA's public NDC directory (api.fda.gov). Only the
-   NDC is sent to the FDA. Lot, expiration and serial stay on this computer.
-2. Type the lot, expiration (`03/2027`, `03/31/2027`, `MAR 2027`…) and serial
-   number if the bottle has one. Enter moves to the next box, and Enter in the
-   serial box prints.
-3. After a print with a serial, the serial box clears for the next bottle.
+1. **Scan the bottle's square barcode.** It fills the NDC, lot, expiration,
+   serial and quantity in one go, from wherever the cursor happens to be —
+   there is no box to click into first. A scan of the plain linear barcode
+   fills the NDC. Or type the NDC and press Enter.
+2. The drug name, strength, form, package, manufacturer and DEA schedule fill
+   in from the FDA's public NDC directory (api.fda.gov). Only the NDC is sent
+   to the FDA. Lot, expiration, quantity and serial stay on this computer.
+3. Fill in anything the barcode didn't carry: lot, expiration (`03/2027`,
+   `03/31/2027`, `MAR 2027`…), **quantity** (how many are in this bottle) and
+   serial number. Enter moves to the next box, and Enter in the serial box
+   prints. Under Quantity, the full package count from the FDA is one click
+   away when the box is empty.
+4. After a print with a serial, the serial box clears for the next bottle.
 
 The label carries a **GS1 DataMatrix**, the same square code manufacturers
-print on bottles: (01) GTIN from the NDC, (17) expiration, (10) lot and
-(21) serial. It uses the stock size set under Label Setup. 3" × 2" is the main
-layout, and anything under 1.4" tall gets a compact one.
+print on bottles: (01) GTIN from the NDC, (17) expiration, (10) lot,
+(21) serial and (30) quantity. It uses the stock size set under Label Setup.
+3" × 2" is the main layout, and anything under 1.4" tall gets a compact one.
 
 Notes for changing it:
+- `public/bottle/wedge.js` is what makes a scan work anywhere on the tab: a
+  scanner is a keyboard, so it watches for characters arriving together faster
+  than hands can type, puts back whatever they typed into the focused box, and
+  hands the whole code over. Ordinary typing is left alone — a ten-digit lot
+  number typed by hand stays a lot number.
 - `public/bottle/layout.js` lays the label out once as a list of elements, and
   `public/labelcore.js` draws that one list as both the on-screen preview (SVG)
   and the ZPL. Text uses the printer font `^A0`; its character widths are
