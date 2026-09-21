@@ -24,27 +24,17 @@
 
   f.tagW.value = localStorage.getItem('zebra_tag_w') || String(NameTagLayout.TAG_W_IN);
   f.tagH.value = localStorage.getItem('zebra_tag_h') || String(NameTagLayout.TAG_H_IN);
+  f.titleOther.value = localStorage.getItem('zebra_tag_title_custom') || '';
   const savedTitle = localStorage.getItem('zebra_tag_title');
-  if (savedTitle === '') {
-    f.title.value = '__none';
-  } else if (savedTitle) {
-    const listed = [...f.title.options].find((o) => titleOf(o) === savedTitle);
-    if (listed) {
-      f.title.value = listed.value;
-    } else {
-      f.title.value = '__other';
-      f.titleOther.value = savedTitle;
-    }
-  }
-
-  function titleOf(option) {
-    return option.value === '__none' || option.value === '__other' ? null : option.textContent.trim();
+  if (savedTitle && [...f.title.options].some((o) => o.value === savedTitle)) {
+    f.title.value = savedTitle;
   }
 
   function saveSettings() {
     localStorage.setItem('zebra_tag_w', f.tagW.value);
     localStorage.setItem('zebra_tag_h', f.tagH.value);
-    localStorage.setItem('zebra_tag_title', title());
+    localStorage.setItem('zebra_tag_title', f.title.value);
+    localStorage.setItem('zebra_tag_title_custom', f.titleOther.value);
   }
 
   /** The title as it will print, or '' for none. */
@@ -77,7 +67,8 @@
     const tag = tagSize();
     let logo = null;
     try {
-      logo = await NameTagLogo.bitmap(NameTagLayout.logoHeight(s, tag));
+      const { maxW, maxH } = NameTagLayout.logoBox(s, tag);
+      logo = await NameTagLogo.bitmap(maxW, maxH);
       logoError = '';
     } catch (e) {
       logoError = e.message;
@@ -178,7 +169,9 @@
     const c = await current();
     const doubts = [];
     if (logoError) doubts.push("The logo couldn't be loaded, so the tag will print without it.");
-    if (!title()) doubts.push('There is no title under the name.');
+    if (f.title.value !== '__none' && !title()) {
+      doubts.push('There is no title under the name.');
+    }
     for (const n of c.layout.notes) doubts.push(n);
     if (doubts.length && !(await askConfirm('Print this tag anyway?', { ok: 'Print anyway', detail: doubts }))) {
       return;

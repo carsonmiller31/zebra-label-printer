@@ -55,7 +55,9 @@ var LabelCore = (function () {
       if (measure(word, h) > maxW) {
         if (!breakWords) return null;
         while (measure(cur, h) > maxW) {
-          let n = cur.length - 1;
+          // At least one character has to come off each time round, or a single
+          // character too wide for the column would loop forever.
+          let n = Math.max(1, cur.length - 1);
           while (n > 1 && measure(cur.slice(0, n), h) > maxW) n--;
           lines.push(cur.slice(0, n));
           cur = cur.slice(n);

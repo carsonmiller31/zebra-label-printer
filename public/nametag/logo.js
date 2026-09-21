@@ -14,7 +14,7 @@
 var NameTagLogo = (function () {
   const SRC = '/nametag/logo.svg';
   const INK = 128;      // alpha (0-255) at which a pixel becomes a dot
-  const CACHE_MAX = 8;  // a handful of sizes: one per stock/dpi combination
+  const CACHE_MAX = 8;  // a handful of sizes: one per stock/tag/dpi combination
 
   let loading = null;
   const cache = new Map();
@@ -45,16 +45,21 @@ var NameTagLogo = (function () {
   }
 
   /**
-   * The mark as `height` dots tall.
+   * The mark, as large as it can be inside `maxW` x `maxH` dots.
    * → { w, h, rows (boolean[][]), png (data URL) }
    */
-  async function bitmap(height) {
-    const h = Math.max(8, Math.round(height));
-    const hit = cache.get(h);
+  async function bitmap(maxW, maxH) {
+    const { img, aspect } = await load();
+    let h = Math.max(8, Math.round(maxH));
+    let w = Math.max(8, Math.round(h * aspect));
+    if (w > maxW) {
+      w = Math.max(8, Math.round(maxW));
+      h = Math.max(8, Math.round(w / aspect));
+    }
+    const key = `${w}x${h}`;
+    const hit = cache.get(key);
     if (hit) return hit;
 
-    const { img, aspect } = await load();
-    const w = Math.max(8, Math.round(h * aspect));
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -81,7 +86,7 @@ var NameTagLogo = (function () {
 
     const out = { w, h, rows, png: canvas.toDataURL('image/png') };
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
-    cache.set(h, out);
+    cache.set(key, out);
     return out;
   }
 

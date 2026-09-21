@@ -26,6 +26,12 @@ var NameTagLayout = (function () {
   const TAG_W_IN = 3;  // the name tag stock they get cut down to
   const TAG_H_IN = 1;
 
+  // How much of the tag the mark may take. The height cap is what shows on a
+  // normal wide tag; the width cap is what stops it from eating the name's
+  // column on a tag that is tall for its width.
+  const LOGO_H_SHARE = 0.72;
+  const LOGO_W_SHARE = 0.32;
+
   /** Where the tag sits on the loaded stock, and how much waste is around it. */
   function tagBox(spec, tag) {
     const wantW = Math.max(40, Math.round((tag && tag.wIn ? tag.wIn : TAG_W_IN) * spec.dpi));
@@ -78,14 +84,15 @@ var NameTagLayout = (function () {
    * the pieces and the height the three of them need together.
    */
   function textStack(input, colW, box, k) {
-    const name = fitName(input.name || 'Name', colW, box.h * 0.30 * k, box.h * 0.13);
+    const unit = Math.min(box.w, box.h);
+    const name = fitName(input.name || 'Name', colW, unit * 0.30 * k, unit * 0.13);
     const title = input.title
-      ? fit(input.title.toUpperCase(), colW, 1, Math.min(name.h * 0.55, box.h * 0.17 * k), box.h * 0.085)
+      ? fit(input.title.toUpperCase(), colW, 1, Math.min(name.h * 0.55, unit * 0.17 * k), unit * 0.085)
       : null;
     const nameH = blockHeight(name.lines.length, name.h);
-    const ruleGapAbove = Math.round(box.h * 0.05);
-    const ruleT = Math.max(2, Math.round(box.h * 0.015));
-    const ruleGapBelow = Math.round(box.h * 0.055);
+    const ruleGapAbove = Math.round(unit * 0.05);
+    const ruleT = Math.max(2, Math.round(unit * 0.015));
+    const ruleGapBelow = Math.round(unit * 0.055);
     const titleH = title ? Math.round((CAP + DESC) * title.h) : 0;
     const h = nameH + (title ? ruleGapAbove + ruleT + ruleGapBelow + titleH : 0);
     return { name, title, nameH, ruleGapAbove, ruleT, ruleGapBelow, titleH, h };
@@ -112,29 +119,45 @@ var NameTagLayout = (function () {
       if (cutLine(els, spec, box, side)) cut = true;
     }
 
-    const m = Math.max(6, Math.round(box.h * 0.09));
+    const unit = Math.min(box.w, box.h); // the short side: what the type has to live within
+    const m = Math.max(6, Math.round(unit * 0.09));
     const innerH = box.h - 2 * m;
-    let x = box.x + m;
+    const left = box.x + m;
     const right = box.x + box.w - m;
+    let x = left;
 
     // --- The mark, down the left, vertically centred -------------------------
+    let mark = null;
     if (input.logo) {
-      const scale = Math.min(1, (box.h * 0.72) / input.logo.h);
+      const scale = Math.min(
+        1,
+        (box.h * LOGO_H_SHARE) / input.logo.h,
+        (box.w * LOGO_W_SHARE) / input.logo.w,
+      );
       const lw = Math.max(1, Math.round(input.logo.w * scale));
       const lh = Math.max(1, Math.round(input.logo.h * scale));
-      els.push({
+      mark = {
         kind: 'image',
         x: Math.round(x),
         y: Math.round(box.y + (box.h - lh) / 2),
         w: lw, h: lh, rows: input.logo.rows, png: input.logo.png,
-      });
-      x += lw + Math.round(box.h * 0.1);
+      };
+      els.push(mark);
+      x += lw + Math.round(unit * 0.1);
     }
 
     // --- Name, a short rule, then the title ----------------------------------
-    const colW = right - x;
-    if (colW < box.h * 0.6) {
-      notes.push('There is no room left for the name — use wider stock, or a wider tag size.');
+    let colW = right - x;
+    if (mark && colW < unit * 0.6) {
+      // Too narrow a tag to hold both. A name tag without the name is no use,
+      // so the mark is the part that goes.
+      els.splice(els.indexOf(mark), 1);
+      notes.push('There is no room for the logo beside the name on a tag this shape, so the tag prints without it.');
+      x = left;
+      colW = right - x;
+    }
+    if (colW < unit * 0.35) {
+      notes.push('The name does not fit on a tag this size — make it wider, or shorter.');
       return { elements: els, notes, fits: false, box, cut };
     }
 
@@ -177,12 +200,16 @@ var NameTagLayout = (function () {
     return { elements: els, notes, fits, box, cut };
   }
 
-  /** The height, in dots, the mark should be rasterised at for this stock. */
-  function logoHeight(spec, tag) {
-    return Math.round(tagBox(spec, tag).h * 0.72);
+  /** The box, in dots, the mark has to be rasterised into for this stock. */
+  function logoBox(spec, tag) {
+    const box = tagBox(spec, tag);
+    return {
+      maxW: Math.max(8, Math.round(box.w * LOGO_W_SHARE)),
+      maxH: Math.max(8, Math.round(box.h * LOGO_H_SHARE)),
+    };
   }
 
-  return { build, logoHeight, tagBox, TAG_W_IN, TAG_H_IN, toSVG: LabelCore.toSVG, toZPL: LabelCore.toZPL };
+  return { build, logoBox, tagBox, TAG_W_IN, TAG_H_IN, toSVG: LabelCore.toSVG, toZPL: LabelCore.toZPL };
 })();
 
 if (typeof module !== 'undefined') module.exports = NameTagLayout;
