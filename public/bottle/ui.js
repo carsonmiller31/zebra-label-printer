@@ -7,8 +7,8 @@
  * and Enter in the serial box prints, so a run of bottles is: scan/type the
  * serial, Enter, next.
  *
- * Uses from app.js: LABEL_W, LABEL_H, dpiEl, labelWEl, labelHEl, ipEl,
- * postPrint(), withPrintSettings(), fitZoom().
+ * Uses from app.js: LABEL_W, LABEL_H, dpiEl, ipEl, postPrint(),
+ * withPrintSettings(), askConfirm().
  */
 (function () {
   const $ = (sel) => document.querySelector(sel);
@@ -26,30 +26,6 @@
     status: $('#bStatus'), zpl: $('#bZpl'),
   };
   const DRUG_FIELDS = ['name', 'generic', 'strength', 'form', 'size', 'schedule', 'labeler'];
-
-  // ---- Tabs ---------------------------------------------------------------
-
-  const tabs = [...document.querySelectorAll('.tab')];
-  function showTab(name) {
-    for (const t of tabs) {
-      const on = t.dataset.tab === name;
-      t.setAttribute('aria-selected', String(on));
-      t.tabIndex = on ? 0 : -1;
-      document.getElementById(`panel-${t.dataset.tab}`).hidden = !on;
-    }
-    localStorage.setItem('zebra_tab', name);
-    if (name === 'designer') fitZoom(); // it can't measure itself while hidden
-    else render();
-  }
-  tabs.forEach((t, i) => {
-    t.addEventListener('click', () => showTab(t.dataset.tab));
-    t.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-      next.focus();
-      showTab(next.dataset.tab);
-    });
-  });
 
   // ---- FDA lookup ---------------------------------------------------------
 
@@ -424,6 +400,5 @@
   ui.print.addEventListener('click', print);
   ui.clear.addEventListener('click', newBottle);
   document.addEventListener('labelsize', render);
-
-  showTab(localStorage.getItem('zebra_tab') === 'designer' ? 'designer' : 'bottle');
+  document.addEventListener('tabchange', (e) => { if (e.detail === 'bottle') render(); });
 })();

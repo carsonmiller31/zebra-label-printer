@@ -1,7 +1,8 @@
 # Zebra Label Printer
 
-A desktop app to design custom labels and print them to a Zebra GX420d (or
-compatible) printer over the network. It ships as a **standalone Windows
+A desktop app to print pharmacy bottle labels and staff name tags — and to
+design custom labels — on a Zebra GX420d (or compatible) printer over the
+network. It ships as a **standalone Windows
 installer** — the target PC needs nothing else installed (no Node, no browser
 setup). Electron bundles its own runtime.
 
@@ -19,7 +20,8 @@ sends ZPL to the printer over raw TCP port 9100 — exactly as before.
    config label that shows it), leave the port at `9100`, and click
    **Print Test Label** to confirm the connection.
 
-Design labels on the canvas and click **Print This Label**.
+Then pick a tab: **Bottle Label** for a drug bottle, **Name Tag** for a staff
+tag, or **Label Designer** to lay out your own and click **Print This Label**.
 
 ## Bottle labels
 
@@ -40,11 +42,11 @@ print on bottles: (01) GTIN from the NDC, (17) expiration, (10) lot and
 layout, and anything under 1.4" tall gets a compact one.
 
 Notes for changing it:
-- `public/bottle/layout.js` lays the label out once, and both the on-screen
-  preview (SVG) and the ZPL are drawn from that. Text uses the printer font
-  `^A0`. Its character widths are measured into a table so every line is
-  shrunk or wrapped before it's sent, because ZPL would just run it off the
-  edge.
+- `public/bottle/layout.js` lays the label out once as a list of elements, and
+  `public/labelcore.js` draws that one list as both the on-screen preview (SVG)
+  and the ZPL. Text uses the printer font `^A0`; its character widths are
+  measured into a table in `labelcore.js` so every line is shrunk or wrapped
+  before it's sent, because ZPL would just run it off the edge.
 - The barcode is encoded by `bwip-js` (served from `node_modules` at
   `/vendor/bwip-js.js`) and printed as a `^GF` bitmap, so the preview and
   the printout come from the same bits.
@@ -52,6 +54,33 @@ Notes for changing it:
   padded one). When more than one could be, the FDA lookup decides. If the
   lookup can't, the tab asks for the code with hyphens as printed on the
   bottle. It won't guess, because a wrong guess encodes a different product.
+
+## Name tags
+
+The **Name Tag** tab prints a staff name tag: the pharmacy mark on the left,
+the person's name beside it, and their title underneath.
+
+1. Type the name.
+2. Pick the title — Pharmacist, Pharmacy Technician and so on, or
+   **Something else…** to type your own. It prints in capitals.
+3. Press Enter (or **Print Name Tag**).
+
+A name tag is **3" × 1"**, which is smaller than the 3" × 2" stock the printer
+is usually loaded with, so the tag prints in the middle of the label with
+dashed lines around it to cut along. Change the finished size under **Finished
+tag size** if the tags you use are different; when it matches the stock exactly
+there is nothing to cut and no lines are printed.
+
+Notes for changing it:
+- The mark is `public/nametag/logo.svg`. Swap that file to change the logo —
+  crop it to the artwork, since the layout positions it by its own edges.
+- The printer takes a bitmap, not an SVG, so `public/nametag/logo.js` draws the
+  mark into a canvas at exactly the size it will print and keeps every pixel at
+  least half covered. Those same dots are handed to the preview as a PNG, so the
+  preview is the printout rather than an approximation of it.
+- `public/nametag/layout.js` places the tag and sizes the name and title. The
+  name sets the scale; if the pair won't clear the tag's height the whole stack
+  is tried a step smaller until it does.
 
 ## Getting the installer built
 
@@ -128,7 +157,9 @@ npm run make-icon  # regenerate build/icon.png
 | `electron/main.js`                    | Electron main process — server, window, auto-update |
 | `server.js`                           | Label server: static files, `/api/print`, ZPL test |
 | `public/`                             | The label-designer UI (HTML/CSS/JS)                |
+| `public/labelcore.js`                 | Font metrics + elements → SVG preview and ZPL      |
 | `public/bottle/`                      | Bottle Label tab: NDC/FDA lookup, GS1, layout, UI  |
+| `public/nametag/`                     | Name Tag tab: logo bitmap, layout, UI              |
 | `scripts/make-icon.js`                | Generates the app icon (no dependencies)           |
 | `.github/workflows/build-windows.yml` | CI that builds the Windows installer               |
 

@@ -10,7 +10,7 @@
   <div class="wrap">
     <header>
       <h1>Zebra Label Printer</h1>
-      <p>Print bottle labels from an NDC, or design your own labels.</p>
+      <p>Print bottle labels from an NDC, staff name tags, or design your own labels.</p>
     </header>
 
     <!-- Connection -->
@@ -72,6 +72,7 @@
 
     <nav class="tabs" role="tablist" aria-label="Label type">
       <button type="button" role="tab" class="tab" id="tab-bottle" data-tab="bottle" aria-controls="panel-bottle">Bottle Label</button>
+      <button type="button" role="tab" class="tab" id="tab-nametag" data-tab="nametag" aria-controls="panel-nametag">Name Tag</button>
       <button type="button" role="tab" class="tab" id="tab-designer" data-tab="designer" aria-controls="panel-designer">Label Designer</button>
     </nav>
 
@@ -170,6 +171,71 @@
           <details class="zpl-details">
             <summary>Show ZPL</summary>
             <textarea id="bZpl" spellcheck="false" readonly></textarea>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Name tag: logo + name + title, centred on the stock with cut lines -->
+    <section class="card nametag" id="panel-nametag" role="tabpanel" aria-labelledby="tab-nametag" hidden>
+      <div class="nametag-grid">
+        <div class="nametag-form">
+          <div class="field">
+            <label for="nName">Name</label>
+            <input id="nName" class="big" type="text" autocomplete="off" placeholder="Sarah Mitchell" />
+          </div>
+
+          <div class="field">
+            <label for="nTitle">Title</label>
+            <select id="nTitle">
+              <option>Pharmacist</option>
+              <option>Pharmacy Technician</option>
+              <option>Technician</option>
+              <option>Pharmacy Intern</option>
+              <option>Student Pharmacist</option>
+              <option>Pharmacy Manager</option>
+              <option value="__none">No title</option>
+              <option value="__other">Something else…</option>
+            </select>
+            <input id="nTitleOther" type="text" autocomplete="off" placeholder="Type the title" hidden />
+            <div class="hint">The title prints in capitals under the name.</div>
+          </div>
+
+          <fieldset class="tagsize">
+            <legend>Finished tag size <span class="opt">— the piece you cut out</span></legend>
+            <div class="row">
+              <div>
+                <label for="nTagW">Width (inches)</label>
+                <input id="nTagW" type="number" step="0.05" min="0.5" value="3" />
+              </div>
+              <div>
+                <label for="nTagH">Height (inches)</label>
+                <input id="nTagH" type="number" step="0.05" min="0.5" value="1" />
+              </div>
+            </div>
+            <div class="hint" id="nCutHint"></div>
+          </fieldset>
+        </div>
+
+        <div class="nametag-side">
+          <div class="preview-stage">
+            <div id="nPreview" class="preview-label" aria-label="Name tag preview"></div>
+          </div>
+          <div class="hint" id="nSizeInfo"></div>
+          <ul class="notes" id="nNotes"></ul>
+
+          <div class="print-row">
+            <div class="copies">
+              <label for="nCopies">Copies</label>
+              <input id="nCopies" type="number" min="1" max="99" value="1" />
+            </div>
+            <button type="button" id="nPrint">Print Name Tag</button>
+            <button type="button" class="secondary" id="nClear">New Tag</button>
+          </div>
+          <div id="nStatus" class="status" aria-live="polite"></div>
+          <details class="zpl-details">
+            <summary>Show ZPL</summary>
+            <textarea id="nZpl" spellcheck="false" readonly></textarea>
           </details>
         </div>
       </div>
@@ -274,10 +340,14 @@
   <script src="/qrcode.js"></script>
   <script src="/barcode128.js"></script>
   <script src="/app.js"></script>
+  <script src="/labelcore.js"></script>
   <script src="/vendor/bwip-js.js"></script>
   <script src="/bottle/ndc.js"></script>
   <script src="/bottle/gs1.js"></script>
   <script src="/bottle/layout.js"></script>
   <script src="/bottle/ui.js"></script>
+  <script src="/nametag/logo.js"></script>
+  <script src="/nametag/layout.js"></script>
+  <script src="/nametag/ui.js"></script>
 </body>
 </html>

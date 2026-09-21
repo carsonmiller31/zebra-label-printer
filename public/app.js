@@ -138,6 +138,34 @@ function applyLabelSize() {
 }
 [labelWEl, labelHEl, dpiEl].forEach((el) => el.addEventListener('input', applyLabelSize));
 
+// ---- Tabs ----
+// Each tab's own module listens for 'tabchange' and redraws when it is the one
+// being shown. The tab that was last open is reopened on the next launch.
+const tabs = [...document.querySelectorAll('.tab')];
+
+function showTab(name) {
+  if (!tabs.some((t) => t.dataset.tab === name)) name = tabs[0].dataset.tab;
+  for (const t of tabs) {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById(`panel-${t.dataset.tab}`).hidden = !on;
+  }
+  localStorage.setItem('zebra_tab', name);
+  if (name === 'designer') fitZoom(); // it can't measure itself while hidden
+  document.dispatchEvent(new CustomEvent('tabchange', { detail: name }));
+}
+
+tabs.forEach((t, i) => {
+  t.addEventListener('click', () => showTab(t.dataset.tab));
+  t.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    next.focus();
+    showTab(next.dataset.tab);
+  });
+});
+
 // ---- Element factory ----
 function addElement(type) {
   const base = { id: nextId++, type, x: 20, y: 20 };
@@ -796,3 +824,5 @@ batchModal.addEventListener('pointerdown', (e) => { if (e.target === batchModal)
 
 // ---- Boot with a blank label ----
 applyLabelSize();
+// Open the last tab once every tab's module has had a chance to subscribe.
+document.addEventListener('DOMContentLoaded', () => showTab(localStorage.getItem('zebra_tab') || 'bottle'));

@@ -217,8 +217,8 @@ section[hidden] { display: none; }
 .err-text { color: var(--err); }
 .err-text:empty { display: none; }
 
-.bottle-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 28px; align-items: start; }
-@media (max-width: 900px) { .bottle-grid { grid-template-columns: 1fr; } }
+.bottle-grid, .nametag-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .bottle-grid, .nametag-grid { grid-template-columns: 1fr; } }
 
 .bottle-form { display: flex; flex-direction: column; gap: 16px; }
 .bottle-form .row > div { min-width: 120px; }
@@ -233,14 +233,20 @@ input.big { font-size: 20px; padding: 10px 12px; letter-spacing: .02em; }
 .tone-err { color: var(--err); }
 .hint.tone-err { color: var(--err); }
 
-fieldset.drug {
+/* ---- Name tag ---- */
+.nametag-form { display: flex; flex-direction: column; gap: 16px; }
+.nametag-form #nTitleOther { margin-top: 8px; }
+.nametag-form #nTitleOther[hidden] { display: none; }
+.nametag-side .preview-label { max-height: 300px; }
+
+fieldset.drug, fieldset.tagsize {
   border: 1px solid var(--border); border-radius: 10px; margin: 4px 0 0;
   padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px;
   background: var(--panel-2);
 }
-fieldset.drug legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+fieldset.drug legend, fieldset.tagsize legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
 
-.bottle-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.bottle-side, .nametag-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .preview-stage {
   background: #e9ecf1; border: 1px solid var(--border); border-radius: 10px;
   padding: 22px; display: flex; justify-content: center;
@@ -261,8 +267,8 @@ fieldset.drug legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
 
 .print-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .print-row .copies { width: 80px; }
-.print-row #bPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
-.bottle-side .status { margin-top: 0; }
+.print-row #bPrint, .print-row #nPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
+.bottle-side .status, .nametag-side .status { margin-top: 0; }
 
 .zpl-details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .zpl-details textarea { margin-top: 8px; font-size: 11px; min-height: 160px; }
