@@ -315,3 +315,103 @@ fieldset.drug legend, fieldset.tagsize legend { font-size: 13px; font-weight: 60
 .modal.confirm h2 { font-size: 17px; }
 .confirm-list { margin: 8px 0 0; padding-left: 20px; font-size: 14px; color: var(--text); }
 .confirm-list li { margin: 2px 0; }
+
+/* ---- Mode switch: Zebra labels vs paper forms ---- */
+.head-bar {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap; margin-bottom: 28px;
+}
+.head-text p { margin: 0; }
+.mode-switch {
+  flex: none; display: flex; gap: 4px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 4px;
+}
+.mode-btn {
+  background: none; color: var(--muted); border: none;
+  border-radius: 7px; padding: 8px 16px; font-size: 14px; font-weight: 600;
+}
+.mode-btn:hover { background: rgba(16, 24, 40, .04); color: var(--text); }
+.mode-btn[aria-selected="true"],
+.mode-btn[aria-selected="true"]:hover {
+  background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .1);
+}
+div[id^="view-"][hidden] { display: none; }
+
+/* ---- Call-in script ---- */
+.callin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; align-items: start; }
+@media (max-width: 980px) { .callin-grid { grid-template-columns: 1fr; } }
+
+.callin-form { display: flex; flex-direction: column; gap: 16px; }
+fieldset.block {
+  border: 1px solid var(--border); border-radius: 10px; margin: 0;
+  padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--panel-2);
+}
+fieldset.block legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+.callin-form textarea {
+  min-height: 62px; font-family: inherit; font-size: 14px; background: var(--panel);
+}
+input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 700; }
+.stamp-live .stamp {
+  padding: 9px 11px; font-size: 14px; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 8px; background: var(--panel);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.callin-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.callin-side .status { margin-top: 0; }
+.print-row #cPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
+
+/* The preview is the printed document itself, scaled down to fit. */
+.paper-stage {
+  background: #e9ecf1; border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; display: flex; justify-content: center;
+}
+.paper-sheet {
+  position: relative; width: 100%; aspect-ratio: 8.5 / 5.5;
+  background: #fff; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(16, 24, 40, .14); outline: 1px solid #cbd0d8;
+}
+.paper-sheet iframe {
+  position: absolute; top: 0; left: 0;
+  width: 816px; height: 528px;   /* 8.5in x 5.5in at 96 dpi */
+  border: 0; transform-origin: 0 0;
+}
+
+/* ---- Paper settings ---- */
+.settings-grid { display: flex; flex-direction: column; gap: 18px; max-width: 660px; }
+.check-row { display: flex; align-items: center; gap: 10px; }
+.check-row input { width: auto; }
+.check-row label { margin: 0; color: var(--text); font-size: 14px; }
+/* A caption that looks like a field label but isn't one (nothing to label). */
+.lbl { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+
+/* On the call-in form an empty box prints as a blank line on a legal record,
+   so a placeholder must never be mistakable for something that was typed. */
+.callin-form ::placeholder { color: #9aa0ab; font-style: italic; opacity: 1; }
+
+/* ---- Drug suggestions ---- */
+.field.combo { position: relative; }
+.suggest {
+  position: absolute; z-index: 20; left: 0; right: 0; top: 100%;
+  margin: 4px 0 0; padding: 4px; list-style: none;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, .16);
+  max-height: 268px; overflow: auto;
+}
+.suggest[hidden] { display: none; }
+.suggest-item {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer;
+  font-size: 14px; line-height: 1.3;
+}
+.suggest-item .si-name { flex: 1; min-width: 0; }
+.suggest-item .si-sub { flex: none; font-size: 12px; color: var(--muted); }
+.suggest-item.on { background: var(--accent); color: #fff; }
+.suggest-item.on .si-sub { color: rgba(255, 255, 255, .8); }
+
+.ndc-lookup { margin-top: -4px; }
+.ndc-lookup .ndc-row input { flex: 1; }
+.ndc-lookup .lookup:empty { display: none; }

@@ -138,10 +138,49 @@ function applyLabelSize() {
 }
 [labelWEl, labelHEl, dpiEl].forEach((el) => el.addEventListener('input', applyLabelSize));
 
+// ---- Mode: Zebra labels, ordinary paper, or invoices ----
+// Three quite different jobs live in this app. Zebra stock goes out as raw ZPL
+// over TCP to the label printer; a sheet of Letter paper goes to whatever
+// printer this computer has; an invoice does too, but is also a record written
+// to the pharmacy's Firestore and so is the one tab behind a sign-in. The
+// switch at the top picks which one you're working with, and it is remembered.
+const modeBtns = [...document.querySelectorAll('.mode-btn')];
+const modeSubEl = $('#modeSub');
+const MODE_SUB = {
+  zebra: 'Print bottle labels from an NDC, staff name tags, or design your own labels.',
+  paper: 'Take a prescription over the phone and print it on the top half of a sheet.',
+  invoices: 'Write a drug transfer or purchase invoice, save it to the record, and print it.',
+};
+
+function showMode(name) {
+  if (!modeBtns.some((b) => b.dataset.mode === name)) name = 'zebra';
+  for (const b of modeBtns) {
+    const on = b.dataset.mode === name;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+    document.getElementById(`view-${b.dataset.mode}`).hidden = !on;
+  }
+  modeSubEl.textContent = MODE_SUB[name];
+  localStorage.setItem('zebra_mode', name);
+  // The designer can't measure itself while its view is hidden.
+  if (name === 'zebra' && localStorage.getItem('zebra_tab') === 'designer') fitZoom();
+  document.dispatchEvent(new CustomEvent('modechange', { detail: name }));
+}
+
+modeBtns.forEach((b, i) => {
+  b.addEventListener('click', () => showMode(b.dataset.mode));
+  b.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const next = modeBtns[(i + (e.key === 'ArrowRight' ? 1 : modeBtns.length - 1)) % modeBtns.length];
+    next.focus();
+    showMode(next.dataset.mode);
+  });
+});
+
 // ---- Tabs ----
 // Each tab's own module listens for 'tabchange' and redraws when it is the one
 // being shown. The tab that was last open is reopened on the next launch.
-const tabs = [...document.querySelectorAll('.tab')];
+const tabs = [...document.querySelectorAll('#zebraTabs .tab')];
 
 function showTab(name) {
   if (!tabs.some((t) => t.dataset.tab === name)) name = tabs[0].dataset.tab;
@@ -825,4 +864,7 @@ batchModal.addEventListener('pointerdown', (e) => { if (e.target === batchModal)
 // ---- Boot with a blank label ----
 applyLabelSize();
 // Open the last tab once every tab's module has had a chance to subscribe.
-document.addEventListener('DOMContentLoaded', () => showTab(localStorage.getItem('zebra_tab') || 'bottle'));
+document.addEventListener('DOMContentLoaded', () => {
+  showTab(localStorage.getItem('zebra_tab') || 'bottle');
+  showMode(localStorage.getItem('zebra_mode') || 'zebra');
+});

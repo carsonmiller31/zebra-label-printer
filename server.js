@@ -91,6 +91,8 @@ const STATIC_TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  // The invoice's two faces, vendored by scripts/vendor.js.
+  '.woff2': 'font/woff2',
 };
 
 // Third-party browser scripts served straight out of node_modules, so the
@@ -201,6 +203,6 @@ module.exports = { start, createPrintServer, testLabelZpl, sendToPrinter };
 if (require.main === module) {
   start(PORT).then((server) => {
     const { port } = server.address();
-    console.log(`Zebra label server running at http://127.0.0.1:${port}`);
+    console.log(`Pharmacy Tools server running at http://127.0.0.1:${port}`);
   });
 }

@@ -1,0 +1,125 @@
+/* ==========================================================================
+   The Invoices page — everything EXCEPT the paper.
+
+   The sheet's own stylesheet lives in invoices/sheet.js, because the printed
+   document needs a copy of it too and one source is the only way the preview
+   can be the printout. What's here is the chrome: the sign-in, the toolbar,
+   the desk the paper sits on, and the history panel. Those follow the rest of
+   this app; the sheet deliberately does not.
+   ========================================================================== */
+
+/* The invoice's faces. Same two the manual loads through next/font, so a slip
+   printed from either app is the same document. Vendored by npm run vendor. */
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url(/invoices/fonts/nunito-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url(/invoices/fonts/nunito-latin-800-normal.woff2) format("woff2"); }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 900; font-display: swap;
+  src: url(/invoices/fonts/nunito-latin-900-normal.woff2) format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(/invoices/fonts/nunito-sans-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(/invoices/fonts/nunito-sans-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Nunito Sans"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url(/invoices/fonts/nunito-sans-latin-700-normal.woff2) format("woff2"); }
+
+/* ---- Sign-in ---------------------------------------------------------- */
+
+.inv-gate { max-width: 560px; }
+.inv-gate-msg { color: var(--muted); font-size: 14px; padding: 8px 0; }
+.inv-gate h2 { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 6px; }
+.inv-gate .hint { margin-bottom: 18px; }
+.inv-gate .status { margin-top: 16px; }
+
+/* ---- Toolbar ---------------------------------------------------------- */
+
+.inv-toolbar {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px;
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(255, 255, 255, .93); backdrop-filter: blur(8px);
+}
+.inv-who { margin-right: auto; min-width: 200px; }
+.inv-who h2 {
+  font-family: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-size: 19px; font-weight: 800; text-transform: none; letter-spacing: 0;
+  color: var(--text); margin: 0;
+}
+.inv-who p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.inv-toolbar .fld { flex: none; }
+.inv-toolbar .fld label { margin-bottom: 4px; }
+.inv-toolbar select { width: auto; min-width: 120px; padding: 7px 10px; font-size: 13px; }
+/* The buttons are the last thing on the bar and the first thing to wrap onto
+   a second row when the window is narrow. Pushed right either way, so they sit
+   under the totals rather than under the title. */
+.inv-toolbar .btns { margin-top: 0; margin-left: auto; }
+.inv-checks { display: flex; flex-direction: column; gap: 5px; }
+.inv-check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.inv-check input { width: auto; margin: 0; accent-color: #2c6d4c; }
+.inv-total { text-align: right; flex: none; }
+.inv-total .k { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.inv-total .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.inv-toolbar .status { width: 100%; margin-top: 0; }
+
+/* A line of prose under the toolbar — a save that failed, or the note that
+   this invoice is now on file and can no longer be edited. */
+.inv-notice {
+  margin: -8px 0 20px; padding: 11px 14px; border-radius: 8px; font-size: 13px;
+  background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+}
+.inv-notice strong { color: var(--text); }
+.inv-notice.err { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.35); color: #b91c1c; }
+.inv-notice[hidden] { display: none; }
+
+/* ---- The desk the paper sits on --------------------------------------- */
+
+.inv-stage { overflow-x: auto; padding-bottom: 40px; }
+.inv-stage-inner { width: fit-content; margin: 0 auto; }
+
+/* A whole sheet of US Letter at 96 dpi: 816 x 1056 with half-inch margins.
+   Only ever seen on screen — on paper the page box supplies the margins. */
+.paper {
+  width: 816px; min-height: 1056px; padding: 48px;
+  background: #fff; border-radius: 3px;
+  box-shadow: 0 1px 2px rgb(38 51 44 / .1), 0 12px 32px rgb(38 51 44 / .11);
+}
+.inv-summary { text-align: center; font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+
+/* ---- History ---------------------------------------------------------- */
+
+.inv-history { max-width: 860px; width: 92vw; max-height: 86vh; display: flex; flex-direction: column; }
+.inv-history-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.inv-history-head h2 { margin: 0; flex: none; }
+.inv-history-head input { flex: 1; min-width: 200px; }
+.inv-history-list { margin-top: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.inv-history-msg { color: var(--muted); font-size: 14px; text-align: center; padding: 32px 0; }
+
+.inv-rec { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.inv-rec.is-void { opacity: .6; }
+.inv-rec-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+  width: 100%; text-align: left; padding: 11px 14px;
+  background: none; color: var(--text); border-radius: 0; font-weight: 400;
+}
+.inv-rec-head:hover { background: var(--panel-2); }
+.inv-rec-num { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums;
+  font-family: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif; }
+.inv-rec-to { font-size: 14px; }
+.inv-rec-meta { font-size: 13px; color: var(--muted); }
+.inv-rec-total { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.inv-void-tag {
+  border: 1px solid #b42318; color: #b42318; border-radius: 4px;
+  padding: 0 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+.inv-rec-body { border-top: 1px solid var(--border); padding: 12px 14px; }
+.inv-rec-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.inv-rec-body td { padding: 3px 0; vertical-align: top; }
+.inv-rec-body .q { width: 34px; font-variant-numeric: tabular-nums; }
+.inv-rec-body .c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+.inv-rec-body .a { text-align: right; font-variant-numeric: tabular-nums; }
+.inv-rec-body .sub { color: var(--muted); font-size: 12px; }
+.inv-rec-tag {
+  border: 1px solid var(--text); border-radius: 3px; padding: 0 4px;
+  font-size: 10px; font-weight: 700; margin-left: 6px;
+}
+.inv-rec-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.inv-rec-note.err { color: #b91c1c; }

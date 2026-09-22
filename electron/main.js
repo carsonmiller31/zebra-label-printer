@@ -4,11 +4,11 @@
 // loopback port, then loads that URL in a native window — so all of the
 // current HTML/CSS/JS and the /api/print TCP-to-printer logic run unchanged.
 
-const { app, BrowserWindow, shell, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require('electron');
 const path = require('path');
 const { start } = require('../server.js');
 
-// A single instance is plenty for a desktop label tool; focus the existing
+// A single instance is plenty for a desktop tool; focus the existing
 // window if the user launches it again.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -53,13 +53,16 @@ if (!gotLock) {
       height: 900,
       minWidth: 940,
       minHeight: 620,
-      title: 'Zebra Label Printer',
+      title: 'Pharmacy Tools',
       backgroundColor: '#0f1115',
       show: false,
       icon: path.join(__dirname, '..', 'build', 'icon.png'),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
+        // The paper-printing bridge (printer list + print job). Nothing else
+        // crosses from the page into Node.
+        preload: path.join(__dirname, 'preload.js'),
       },
     });
 
@@ -85,10 +88,91 @@ if (!gotLock) {
     setupAutoUpdater();
   }
 
+  // --- Paper printing --------------------------------------------------------
+  // Zebra labels go out as raw ZPL over TCP (server.js). Ordinary sheets of
+  // paper go through Chromium's printer instead: the page hands over a
+  // finished HTML document, we render it in a hidden window and print that.
+
+  ipcMain.handle('paper:printers', async () => {
+    if (!mainWindow) return [];
+    const list = await mainWindow.webContents.getPrintersAsync();
+    return list.map((p) => ({
+      name: p.name,
+      displayName: p.displayName || p.name,
+      isDefault: !!p.isDefault,
+      status: p.status,
+    }));
+  });
+
+  ipcMain.handle('paper:print', async (_event, { html, deviceName } = {}) => {
+    if (typeof html !== 'string' || !html.trim()) {
+      return { ok: false, error: 'Nothing to print', message: 'Nothing to print.' };
+    }
+
+    // A throwaway window holding just the form. It never shows; it exists so
+    // Chromium has something laid out to print. Scripting is off — the
+    // document is ours and is pure markup.
+    const sheet = new BrowserWindow({
+      parent: mainWindow || undefined,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        javascript: false,
+      },
+    });
+
+    try {
+      await sheet.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+      const opts = {
+        // With a chosen printer we print straight away; without one, let the
+        // user pick in the system dialog.
+        silent: !!deviceName,
+        printBackground: true,
+        margins: { marginType: 'none' },
+        pageSize: 'Letter',
+        copies: 1, // copies are extra pages in the document itself
+      };
+      if (deviceName) opts.deviceName = deviceName;
+
+      const result = await new Promise((resolve) => {
+        sheet.webContents.print(opts, (success, failureReason) =>
+          resolve({ success, failureReason })
+        );
+      });
+
+      if (result.success) {
+        return {
+          ok: true,
+          message: deviceName ? `Sent to ${deviceName}.` : 'Sent to the printer.',
+        };
+      }
+      const reason = String(result.failureReason || '');
+      if (/cancel/i.test(reason)) {
+        return { ok: false, cancelled: true, message: 'Printing was cancelled.' };
+      }
+      return { ok: false, error: reason, message: reason || 'The printer refused the job.' };
+    } catch (err) {
+      const message = String((err && err.message) || err);
+      return { ok: false, error: message, message };
+    } finally {
+      // The callback fires once the job is handed over, but tearing the window
+      // down in the same tick has been known to truncate a spooling job on
+      // Windows. A moment's grace costs nothing — the window is invisible.
+      setTimeout(() => { if (!sheet.isDestroyed()) sheet.destroy(); }, 2000);
+    }
+  });
+
   // --- Auto-update (GitHub Releases via electron-updater) ---------------------
   // Checks the project's GitHub Releases for a newer version, downloads it in
   // the background, and offers to restart to install. The update feed is the
   // `latest.yml` published alongside each release by the build workflow.
+  // The app is called Pharmacy Tools now, but the repo, the release feed and
+  // the NSIS appId are deliberately unchanged: electron-updater finds the
+  // installed copy by appId, so renaming those would turn every update into a
+  // second, parallel installation instead of an upgrade in place.
   const UPDATE_OWNER = 'carsonmiller31';
   const UPDATE_REPO = 'zebra-label-printer';
 
@@ -124,7 +208,7 @@ if (!gotLock) {
         defaultId: 0,
         cancelId: 1,
         title: 'Update ready',
-        message: `Zebra Label Printer ${info && info.version ? info.version : ''} is ready to install.`,
+        message: `Pharmacy Tools ${info && info.version ? info.version : ''} is ready to install.`,
         detail: 'Restart now to finish updating. If you choose Later, it installs automatically the next time you close the app.',
       });
       if (response === 0) autoUpdater.quitAndInstall();
@@ -140,7 +224,7 @@ if (!gotLock) {
     .then(createWindow)
     .catch((err) => {
       dialog.showErrorBox(
-        'Could not start Zebra Label Printer',
+        'Could not start Pharmacy Tools',
         String((err && err.stack) || err)
       );
       app.quit();

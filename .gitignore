@@ -4,3 +4,6 @@ build/icon.png
 firebase-debug.log
 *.log
 .DS_Store
+
+# Cached RxNorm responses; regenerate with scripts/build-drug-list.js
+scripts/.rxnorm-cache/

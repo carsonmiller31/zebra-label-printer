@@ -3,15 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zebra Label Printer</title>
+  <title>Pharmacy Tools</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/invoices/invoices.css" />
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Zebra Label Printer</h1>
-      <p>Print bottle labels from an NDC, staff name tags, or design your own labels.</p>
+      <div class="head-bar">
+        <div class="head-text">
+          <h1>Pharmacy Tools</h1>
+          <p id="modeSub">Print bottle labels from an NDC, staff name tags, or design your own labels.</p>
+        </div>
+        <div class="mode-switch" role="tablist" aria-label="Printer">
+          <button type="button" role="tab" class="mode-btn" id="mode-zebra"
+                  data-mode="zebra" aria-controls="view-zebra">Zebra Labels</button>
+          <button type="button" role="tab" class="mode-btn" id="mode-paper"
+                  data-mode="paper" aria-controls="view-paper">Paper Forms</button>
+          <button type="button" role="tab" class="mode-btn" id="mode-invoices"
+                  data-mode="invoices" aria-controls="view-invoices">Invoices</button>
+        </div>
+      </div>
     </header>
+
+    <!-- ===================== ZEBRA: labels over TCP ===================== -->
+    <div id="view-zebra" role="tabpanel" aria-labelledby="mode-zebra">
 
     <!-- Connection -->
     <div class="card">
@@ -70,7 +86,7 @@
       <div class="hint" id="dotsInfo" style="margin-top:-12px;"></div>
     </div>
 
-    <nav class="tabs" role="tablist" aria-label="Label type">
+    <nav class="tabs" id="zebraTabs" role="tablist" aria-label="Label type">
       <button type="button" role="tab" class="tab" id="tab-bottle" data-tab="bottle" aria-controls="panel-bottle">Bottle Label</button>
       <button type="button" role="tab" class="tab" id="tab-nametag" data-tab="nametag" aria-controls="panel-nametag">Name Tag</button>
       <button type="button" role="tab" class="tab" id="tab-designer" data-tab="designer" aria-controls="panel-designer">Label Designer</button>
@@ -312,6 +328,273 @@
       <div class="hint">This ZPL is generated from your design and sent to the printer.</div>
     </div>
     </section>
+    </div><!-- /#view-zebra -->
+
+    <!-- ===================== PAPER: 8.5 x 11 forms ===================== -->
+    <div id="view-paper" role="tabpanel" aria-labelledby="mode-paper" hidden>
+
+      <nav class="tabs" id="paperTabs" role="tablist" aria-label="Form">
+        <button type="button" role="tab" class="tab ptab" id="tab-callin" data-ptab="callin" aria-controls="panel-callin">Call-In Script</button>
+        <button type="button" role="tab" class="tab ptab" id="tab-settings" data-ptab="settings" aria-controls="panel-settings">Settings</button>
+      </nav>
+
+      <!-- Call-in script: a phoned-in prescription, written down and printed -->
+      <section class="card callin" id="panel-callin" role="tabpanel" aria-labelledby="tab-callin" hidden>
+        <div class="callin-grid">
+          <div class="callin-form">
+
+            <fieldset class="block">
+              <legend>Patient</legend>
+              <div class="row">
+                <div style="flex:2;">
+                  <label for="cPatient">Name</label>
+                  <input id="cPatient" class="big" type="text" autocomplete="off" placeholder="Jane Q. Patient" />
+                </div>
+                <div>
+                  <label for="cDob">Date of birth</label>
+                  <input id="cDob" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="04/11/1958" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="block">
+              <legend>Prescription</legend>
+              <div class="field combo">
+                <label for="cDrug">Drug, strength &amp; form</label>
+                <input id="cDrug" class="big" type="text" autocomplete="off" spellcheck="false"
+                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-controls="cDrugList" placeholder="Atorvastatin 40 mg tablet" />
+                <ul id="cDrugList" class="suggest" role="listbox" aria-label="Drug suggestions" hidden></ul>
+              </div>
+
+              <div class="field ndc-lookup">
+                <label for="cNdc">Or look it up by NDC <span class="opt">— from the bottle</span></label>
+                <div class="ndc-row">
+                  <input id="cNdc" class="mono" type="text" autocomplete="off" spellcheck="false"
+                         placeholder="0093-7180-56" />
+                  <button type="button" class="secondary" id="cNdcBtn">Look up</button>
+                </div>
+                <div id="cNdcStatus" class="lookup" aria-live="polite"></div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="cQty">Quantity</label>
+                  <input id="cQty" type="text" autocomplete="off" placeholder="90" />
+                </div>
+                <div>
+                  <label for="cRefills">Refills</label>
+                  <input id="cRefills" type="text" autocomplete="off" placeholder="3" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="cSig">Directions <span class="opt">— the sig, as dictated</span></label>
+                <textarea id="cSig" rows="2" spellcheck="true" placeholder="Take 1 tablet by mouth at bedtime"></textarea>
+              </div>
+            </fieldset>
+
+            <fieldset class="block">
+              <legend>Prescriber</legend>
+              <div class="row">
+                <div style="flex:2;">
+                  <label for="cPrescriber">Name</label>
+                  <input id="cPrescriber" type="text" autocomplete="off" placeholder="Dr. John Smith" />
+                </div>
+                <div>
+                  <label for="cNpi">NPI / DEA</label>
+                  <input id="cNpi" class="mono" type="text" autocomplete="off" placeholder="1234567890" />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="block">
+              <legend>The call</legend>
+              <div class="row">
+                <div style="flex:2;">
+                  <label for="cCaller">Called in by <span class="opt">— name &amp; office</span></label>
+                  <input id="cCaller" type="text" autocomplete="off" placeholder="Amy, RN — Smith Family Medicine" />
+                </div>
+                <div>
+                  <label for="cPhone">Call-back phone</label>
+                  <input id="cPhone" class="mono" type="tel" autocomplete="off" placeholder="(555) 123-4567" />
+                </div>
+              </div>
+              <div class="row">
+                <div style="max-width:140px;">
+                  <label for="cInitials">Taken by <span class="opt">— initials</span></label>
+                  <input id="cInitials" class="mono initials" type="text" maxlength="4" autocomplete="off" placeholder="CM" />
+                </div>
+                <div class="stamp-live">
+                  <div class="lbl">Timestamp</div>
+                  <div class="stamp" id="cStamp"></div>
+                </div>
+              </div>
+            </fieldset>
+
+          </div>
+
+          <div class="callin-side">
+            <div class="paper-stage">
+              <div class="paper-sheet">
+                <iframe id="cPreview" title="Form preview" scrolling="no"></iframe>
+              </div>
+            </div>
+            <div class="hint" id="cSheetInfo"></div>
+            <ul class="notes" id="cNotes"></ul>
+
+            <div class="print-row">
+              <div class="copies">
+                <label for="cCopies">Copies</label>
+                <input id="cCopies" type="number" min="1" max="20" value="1" />
+              </div>
+              <button type="button" id="cPrint">Print Form</button>
+              <button type="button" class="secondary" id="cClear">New Call</button>
+            </div>
+            <div id="cStatus" class="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Paper settings: which printer, and what goes on every form -->
+      <section class="card" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+        <div class="settings-grid">
+          <div class="field">
+            <label for="sPrinter">Paper printer</label>
+            <div class="ndc-row">
+              <select id="sPrinter"></select>
+              <button type="button" class="secondary" id="sRefresh">Refresh</button>
+            </div>
+            <div class="hint" id="sPrinterHint"></div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="sInitials">Your initials</label>
+              <input id="sInitials" class="mono initials" type="text" maxlength="4" autocomplete="off" placeholder="CM" />
+              <div class="hint">Filled in on every new call, and printed in the box at the bottom.</div>
+            </div>
+            <div style="flex:2;">
+              <label for="sOrg">Pharmacy name <span class="opt">— optional</span></label>
+              <input id="sOrg" type="text" autocomplete="off" placeholder="Waveflow Pharmacy" />
+              <div class="hint">Printed small under the heading. Leave it blank for none.</div>
+            </div>
+          </div>
+
+          <div class="check-row">
+            <input type="checkbox" id="sCut" />
+            <label for="sCut">Print a dashed cut line across the middle of the page</label>
+          </div>
+
+          <div class="btns">
+            <button type="button" class="secondary" id="sTest">Print a Test Form</button>
+          </div>
+          <div id="sStatus" class="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+    </div><!-- /#view-paper -->
+
+    <!-- ===================== INVOICES: drug transfer slips ===================== -->
+    <!-- The Instruction Manual's Invoice Builder, on the same Firestore data.
+         Sign-in is required here and nowhere else in the app: these are
+         controlled-substance transfer records, and the shared firestore.rules
+         only let a `manualRole` holder near them. See invoices/store.js. -->
+    <div id="view-invoices" role="tabpanel" aria-labelledby="mode-invoices" hidden>
+
+      <!-- The gate: checking, signing in, or signed in with no role granted. -->
+      <section class="card inv-gate" id="invGate">
+        <div class="inv-gate-msg" id="invChecking">Checking sign-in…</div>
+
+        <form id="invSignInForm" hidden>
+          <h2>Sign in to write invoices</h2>
+          <p class="hint">
+            The same email and password you use for the R &amp; J Instruction Manual.
+            Invoices are shared with it — one history, one numbering.
+          </p>
+          <div class="row">
+            <div>
+              <label for="invEmail">Email</label>
+              <input id="invEmail" type="email" autocomplete="username" spellcheck="false" />
+            </div>
+            <div>
+              <label for="invPassword">Password</label>
+              <input id="invPassword" type="password" autocomplete="current-password" />
+            </div>
+          </div>
+          <div class="btns">
+            <button type="submit" id="invSignInBtn">Sign in</button>
+            <button type="button" class="secondary" id="invResetBtn">Email a reset link</button>
+          </div>
+          <div class="status" id="invSignInStatus" aria-live="polite"></div>
+        </form>
+
+        <div id="invNoAccess" hidden>
+          <h2>This account can’t write invoices yet</h2>
+          <p class="hint">
+            You’re signed in as <span id="invNoAccessEmail" class="mono"></span>, but nobody has
+            given this account access to the manual and its invoices. Ask Carson to add you
+            under <strong>People</strong> in the Instruction Manual, then sign in again.
+          </p>
+          <div class="btns">
+            <button type="button" class="secondary" id="invNoAccessOut">Sign out</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="invApp" hidden>
+        <div class="card inv-toolbar">
+          <div class="inv-who">
+            <h2>Invoice Builder</h2>
+            <p><span id="invEmailLabel"></span> &middot;
+              <button type="button" class="link-btn" id="invSignOut">Sign out</button></p>
+          </div>
+
+          <div class="fld">
+            <label for="invDocType">Document type</label>
+            <select id="invDocType"
+                    title="Relabels the two party blocks — Transferred from/to for a drug transfer, Purchaser/Vendor for a purchase">
+              <option value="transfer">Transfer</option>
+              <option value="purchase">Purchase</option>
+            </select>
+          </div>
+
+          <div class="fld">
+            <label for="invPrinter">Printer</label>
+            <select id="invPrinter"></select>
+          </div>
+
+          <div class="inv-checks">
+            <label class="inv-check"><input type="checkbox" id="invTwoCopies" checked /> Print two copies</label>
+            <label class="inv-check"
+                   title="Sends only the NDC to the FDA’s public drug directory — no other invoice data leaves this computer.">
+              <input type="checkbox" id="invNdcLookup" checked /> Look up NDCs
+            </label>
+          </div>
+
+          <div class="inv-total">
+            <div class="k">Total</div>
+            <div class="v" id="invTotal">$0.00</div>
+          </div>
+
+          <div class="btns">
+            <button type="button" class="secondary" id="invHistoryBtn">History</button>
+            <button type="button" class="secondary" id="invClearBtn">Clear</button>
+            <button type="button" id="invPrintBtn">Save &amp; Print</button>
+          </div>
+
+          <div class="status" id="invStatus" aria-live="polite"></div>
+        </div>
+
+        <div class="inv-notice" id="invNotice" hidden></div>
+
+        <!-- The paper is the editor. Click any spot on it and type. -->
+        <div class="inv-stage">
+          <div class="inv-stage-inner">
+            <div class="paper"><div id="invSheet"></div></div>
+            <p class="inv-summary" id="invSummary"></p>
+          </div>
+        </div>
+      </div>
+    </div><!-- /#view-invoices -->
   </div>
 
   <!-- Batch print: enter item name + barcode repeatedly, print 4 per label -->
@@ -346,6 +629,20 @@
     </div>
   </div>
 
+
+  <!-- Invoice history: every slip on file, newest first. -->
+  <div id="invHistoryModal" class="modal-overlay" hidden>
+    <div class="modal inv-history">
+      <div class="inv-history-head">
+        <h2>Invoice history</h2>
+        <input id="invSearch" type="search" autocomplete="off"
+               placeholder="Search number, pharmacy, drug, NDC, lot, who picked it up…" />
+        <button type="button" class="secondary" id="invHistoryClose">Close</button>
+      </div>
+      <div class="inv-history-list" id="invHistoryList"></div>
+    </div>
+  </div>
+
   <script src="/qrcode.js"></script>
   <script src="/barcode128.js"></script>
   <script src="/app.js"></script>
@@ -359,5 +656,18 @@
   <script src="/nametag/logo.js"></script>
   <script src="/nametag/layout.js"></script>
   <script src="/nametag/ui.js"></script>
+  <script src="/paper/drugs.js"></script>
+  <script src="/paper/drugsearch.js"></script>
+  <script src="/paper/form.js"></script>
+  <script src="/paper/print.js"></script>
+  <script src="/paper/ui.js"></script>
+  <script src="/vendor/firebase-app-compat.js"></script>
+  <script src="/vendor/firebase-auth-compat.js"></script>
+  <script src="/vendor/firebase-firestore-compat.js"></script>
+  <script src="/invoices/model.js"></script>
+  <script src="/invoices/store.js"></script>
+  <script src="/invoices/sheet.js"></script>
+  <script src="/invoices/fonts.js"></script>
+  <script src="/invoices/ui.js"></script>
 </body>
 </html>

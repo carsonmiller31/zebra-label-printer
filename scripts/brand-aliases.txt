@@ -1,0 +1,62 @@
+# Brands people still say on the phone that RxNorm no longer carries.
+#
+# Everything in public/paper/drugs.js comes from RxNorm's Current Prescribable
+# Content — which is a list of what can be dispensed *now*. An office that has
+# been calling in "Coumadin" for twenty years does not stop because the brand
+# was retired, so these names are kept searchable by hand.
+#
+# This file is judgement, not data: it is about what people say, not about
+# what a drug is. Nothing here changes a strength, a form or a dose — it only
+# adds another word that finds an existing entry.
+#
+#   Brand = Generic name exactly as it appears in drug-names.txt
+#
+Coumadin    = Warfarin
+Vicodin     = Hydrocodone/Acetaminophen
+Lortab      = Hydrocodone/Acetaminophen
+DiaBeta     = Glyburide
+Micronase   = Glyburide
+Keflex      = Cephalexin
+Z-Pak       = Azithromycin
+Zithromax   = Azithromycin
+Flexeril    = Cyclobenzaprine
+Ventolin    = Albuterol
+ProAir      = Albuterol
+Proventil   = Albuterol
+Flonase     = Fluticasone Propionate
+Zofran      = Ondansetron
+Desyrel     = Trazodone
+Adderall    = Amphetamine Salts
+Levemir     = Insulin Detemir
+Macrobid    = Nitrofurantoin
+Macrodantin = Nitrofurantoin
+Catapres    = Clonidine
+Hytrin      = Terazosin
+Ditropan    = Oxybutynin
+Requip      = Ropinirole
+Atarax      = Hydroxyzine HCl
+Vistaril    = Hydroxyzine HCl
+Bentyl      = Dicyclomine
+Lioresal    = Baclofen
+Zomig       = Zolmitriptan
+
+# Abbreviations that get typed at the counter rather than spoken. Written with
+# ~ instead of = because they are not brands: they make an entry findable, but
+# they are never shown beside it — a row reading "Hydrochlorothiazide [HCTZ]"
+# tells nobody anything.
+HCTZ ~ Hydrochlorothiazide
+APAP ~ Acetaminophen
+ASA ~ Aspirin
+MTX ~ Methotrexate
+HCQ ~ Hydroxychloroquine
+SMZ ~ Sulfamethoxazole/Trimethoprim
+TMP ~ Sulfamethoxazole/Trimethoprim
+Bactrim DS ~ Sulfamethoxazole/Trimethoprim
+MSIR ~ Morphine Sulfate
+INH ~ Isoniazid
+KCl ~ Potassium Chloride
+NTG ~ Nitroglycerin
+ISMN ~ Isosorbide Mononitrate
+PCN ~ Penicillin V Potassium
+EES ~ Erythromycin
+MVI ~ Cyanocobalamin
