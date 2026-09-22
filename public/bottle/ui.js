@@ -228,6 +228,10 @@
       labeler: f.labeler.value.trim(),
       schedule: f.schedule.value,
       ndc: ndc && !ndc.error ? ndc.display || ndc.ndc10 || ndc.ndc11 : raw,
+      // The plain barcode carries the 10 digits the manufacturer assigned —
+      // the same thing a scan of the bottle's own linear barcode gives back.
+      ndcBarcode: ndc && !ndc.error ? ndc.ndc10 || '' : '',
+      printedAt: new Date(),
       qty: qtyError ? '' : qty,
       lot,
       exp: exp && !exp.error ? exp.display : '',

@@ -113,5 +113,7 @@
     return { bits, modules: bits.length };
   }
 
-  window.Barcode128 = { encode };
+  const api = { encode };
+  if (typeof window !== 'undefined') window.Barcode128 = api;
+  if (typeof module !== 'undefined') module.exports = api;
 })();

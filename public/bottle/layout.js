@@ -8,6 +8,7 @@
  * font so no line can run off the edge.
  */
 var LabelCore = typeof LabelCore !== 'undefined' ? LabelCore : require('../labelcore.js');
+var Barcode128 = typeof Barcode128 !== 'undefined' ? Barcode128 : require('../barcode128.js');
 
 var BottleLayout = (function () {
   const {
@@ -26,7 +27,8 @@ var BottleLayout = (function () {
 
   /**
    * input: { name, generic, strength, dosageForm, size, labeler, schedule,
-   *          ndc, qty, lot, exp, serial, cells }   (cells = boolean[][] or null)
+   *          ndc, ndcBarcode, qty, lot, exp, serial, cells, printedAt }
+   *          (cells = boolean[][] or null; printedAt = Date or null)
    * spec:  { W, H, dpi }   label size in dots
    * → { elements, notes }
    */
@@ -101,6 +103,59 @@ var BottleLayout = (function () {
     return { n, mod, side: n * mod, readable: mod >= 2 };
   }
 
+  /**
+   * The NDC on its own as a plain Code 128 stripe, turned a quarter turn so it
+   * runs down the right edge and costs the label width rather than its height.
+   * `space` is the room it has to run in, including the quiet zone a scanner
+   * needs at each end. Null when the narrowest bar would come out under about
+   * 10 mil (0.25 mm), the smallest GS1 allows: thinner than that it smears on
+   * a thermal head, and a barcode that won't scan is worse than none.
+   */
+  const QUIET = 10; // modules of clear space at each end, per the Code 128 spec
+  const MIN_X = 0.0098; // inches \u2014 the narrowest module worth printing
+
+  function barsGeometry(data, space, spec, P) {
+    const digits = String(data || '').replace(/\D/g, '');
+    if (!digits) return null;
+    const { bits } = Barcode128.encode(digits);
+    const mod = Math.min(P(3), Math.floor(space / (bits.length + 2 * QUIET)));
+    if (mod < Math.max(2, Math.round(MIN_X * spec.dpi))) return null;
+    const run = bits.length * mod;
+    // Bar length: the 15% of the symbol's length Code 128 asks for, kept to
+    // something between about a fifth and two fifths of an inch.
+    const len = Math.max(P(42), Math.min(P(80), Math.round(run * 0.2)));
+    return { bits, mod, run, len };
+  }
+
+  /** Puts the stripe against the right edge, centred in `space` from `top`. */
+  function placeBars(els, bars, xRight, top, space) {
+    els.push({
+      kind: 'bars', dir: 'down',
+      x: Math.round(xRight - bars.len),
+      y: Math.round(top + (space - bars.run) / 2),
+      mod: bars.mod, len: bars.len, bits: bars.bits,
+    });
+  }
+
+  const BARS_NOTE = "There's no room for the NDC barcode on this label size \u2014 the square code still carries it.";
+
+  /** When the label was printed, for the line along the bottom. */
+  function printedStamp(at) {
+    const d = at instanceof Date && !isNaN(at.getTime()) ? at : new Date();
+    const date = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+    let hour = d.getHours();
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    const time = `${hour}:${String(d.getMinutes()).padStart(2, '0')} ${suffix}`;
+    return { long: `Printed ${date} ${time}`, short: `Printed ${date}` };
+  }
+
+  /** The longest form of the stamp that fits `maxW`. */
+  function stampText(input, h, maxW) {
+    const stamp = printedStamp(input.printedAt);
+    return measure(stamp.long, h) <= maxW ? stamp.long : stamp.short;
+  }
+
   const subLine = (input) => [input.strength, input.dosageForm].filter(Boolean).join(' \u00b7 ');
 
   /**
@@ -128,9 +183,20 @@ var BottleLayout = (function () {
     const { P, els, notes } = ctx;
     const { W, H } = spec;
     const m = P(14);
-    const x0 = m, x1 = W - m, fullW = x1 - x0;
+    const x0 = m;
+    let x1 = W - m;
     let fits = true;
     let y = m;
+
+    // --- The NDC barcode: a stripe down the right edge, full label height ---
+    const bars = barsGeometry(input.ndcBarcode, H - 2 * m, spec, P);
+    if (bars) {
+      placeBars(els, bars, W - m, m, H - 2 * m);
+      x1 -= bars.len + P(14);
+    } else if (input.ndcBarcode) {
+      notes.push(BARS_NOTE);
+    }
+    const fullW = x1 - x0;
 
     // --- Header: schedule badge, drug name, strength/form, package ---------
     let badgeBox = null;
@@ -153,9 +219,13 @@ var BottleLayout = (function () {
     els.push({ kind: 'box', x: x0, y, w: fullW, h: P(3), t: P(3) });
     const bodyTop = y + P(3) + P(10);
 
-    // --- Footer: manufacturer and Rx only ------------------------------------
+    // --- Footer: manufacturer, Rx only, and when this label was printed -----
+    const ph = Math.round(P(15) * Math.max(k, 0.8));
+    const stampBase = H - m - Math.round(DESC * ph);
+    textLine(els, x0, stampBase, ph, stampText(input, ph, fullW));
+
     const fh = Math.round(P(19) * Math.max(k, 0.8));
-    const footBase = H - m - Math.round(DESC * fh);
+    const footBase = Math.round(stampBase - CAP * ph - P(7) - DESC * fh);
     const rx = 'Rx only';
     const rxW = measure(rx, fh);
     textLine(els, x1 - rxW, footBase, fh, rx);
@@ -209,10 +279,21 @@ var BottleLayout = (function () {
     const { P, els, notes } = ctx;
     const { W, H } = spec;
     const m = P(10);
-    const x0 = m, x1 = W - m;
+    const x0 = m;
+    let x1 = W - m;
     let fits = true;
 
-    const code = codeGeometry(input.cells, Math.min(H - 2 * m, Math.round((W - 2 * m) * 0.4)), P);
+    // The NDC barcode down the right edge — only when the stock is tall
+    // enough for bars a scanner can read.
+    const bars = barsGeometry(input.ndcBarcode, H - 2 * m, spec, P);
+    if (bars) {
+      placeBars(els, bars, W - m, m, H - 2 * m);
+      x1 -= bars.len + P(8);
+    } else if (input.ndcBarcode) {
+      notes.push(BARS_NOTE);
+    }
+
+    const code = codeGeometry(input.cells, Math.min(H - 2 * m, Math.round((x1 - x0) * 0.4)), P);
     let fx = x0;
     if (code) {
       if (!code.readable) fits = false;
@@ -269,6 +350,12 @@ var BottleLayout = (function () {
       y += LEAD * vh * 1.05;
     }
     y += DESC * vh - LEAD * vh * 0.05;
+
+    // When it was printed, on a line of its own under the fields.
+    const ph = Math.max(P(11), Math.round(P(13) * k));
+    y += P(3);
+    textLine(els, fx, y + CAP * ph, ph, stampText(input, ph, colW));
+    y += Math.round((CAP + DESC) * ph);
 
     if (y > H - m + 1) fits = false;
     // Centre the text column against the label's height.

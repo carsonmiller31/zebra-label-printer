@@ -7,7 +7,12 @@
  *   { kind: 'text',   x, y (baseline), h, s, reverse? }
  *   { kind: 'box',    x, y, w, h, t }                      // t = border thickness
  *   { kind: 'matrix', x, y, mod, cells }                   // boolean[][]
+ *   { kind: 'bars',   x, y, mod, len, bits, dir }          // linear barcode
  *   { kind: 'image',  x, y, w, h, rows, png? }             // rows = boolean[][]
+ *
+ * A 'bars' element is one module per entry of `bits`, each `mod` dots along
+ * the reading direction (`dir`: 'right' for upright bars, 'down' for a stripe
+ * rotated a quarter turn), and `len` dots the other way — the bar length.
  *
  * An image is drawn at w x h dots whatever resolution `rows` holds, so a
  * bitmap rasterised for one label size still prints (a little rougher) on
@@ -111,6 +116,25 @@ var LabelCore = (function () {
   // Output
   // -------------------------------------------------------------------------
 
+  /** The dots a linear barcode covers: bits run one way, bar length the other. */
+  function barsBox(el) {
+    const run = el.bits.length * el.mod;
+    return el.dir === 'down' ? { w: el.len, h: run } : { w: run, h: el.len };
+  }
+
+  /** Runs of adjacent bars, so the preview draws one rectangle per bar. */
+  function barRuns(bits) {
+    const runs = [];
+    for (let i = 0; i < bits.length; i++) {
+      if (!bits[i]) continue;
+      let j = i;
+      while (j + 1 < bits.length && bits[j + 1]) j++;
+      runs.push([i, j - i + 1]);
+      i = j;
+    }
+    return runs;
+  }
+
   const xmlEscape = (s) =>
     String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -138,6 +162,17 @@ var LabelCore = (function () {
         el.cells.forEach((row, r) => row.forEach((on, c) => {
           if (on) d += `M${el.x + c * el.mod} ${el.y + r * el.mod}h${el.mod}v${el.mod}h-${el.mod}z`;
         }));
+        out.push(`<path d="${d}" fill="#111" shape-rendering="crispEdges"/>`);
+      } else if (el.kind === 'bars') {
+        const { w, h } = barsBox(el);
+        let d = '';
+        for (const [start, count] of barRuns(el.bits)) {
+          const off = start * el.mod;
+          const run = count * el.mod;
+          d += el.dir === 'down'
+            ? `M${el.x} ${el.y + off}h${w}v${run}h-${w}z`
+            : `M${el.x + off} ${el.y}h${run}v${h}h-${run}z`;
+        }
         out.push(`<path d="${d}" fill="#111" shape-rendering="crispEdges"/>`);
       } else if (el.kind === 'image') {
         // The same dots that go to the printer, drawn one PNG pixel per dot.
@@ -210,6 +245,14 @@ var LabelCore = (function () {
         lines.push(`^FT${el.x},${el.y}^A0N,${el.h},${el.h}${el.reverse ? '^FR' : ''}^FH_^FD${zplText(el.s)}^FS`);
       } else if (el.kind === 'matrix') {
         lines.push(matrixGraphic(el));
+      } else if (el.kind === 'bars') {
+        // Drawn as dots rather than ^BC so the preview is the printed bars,
+        // rotation and all. Repeated rows collapse to ':', so it stays small.
+        const { w, h } = barsBox(el);
+        const on = el.dir === 'down'
+          ? (x, y) => !!el.bits[Math.floor(y / el.mod)]
+          : (x, y) => !!el.bits[Math.floor(x / el.mod)];
+        lines.push(bitmapGraphic(el.x, el.y, w, h, on));
       } else if (el.kind === 'image') {
         lines.push(bitmapGraphic(el.x, el.y, el.w, el.h, imageSampler(el)));
       }
@@ -223,7 +266,7 @@ var LabelCore = (function () {
   return {
     CAP, DESC, LEAD,
     advance, measure, blockHeight, wrap, fit, fitName, textLine, placeBlock,
-    toSVG, toZPL, zplText, xmlEscape, bitmapGraphic, imageSampler,
+    toSVG, toZPL, zplText, xmlEscape, bitmapGraphic, imageSampler, barsBox,
   };
 })();
 

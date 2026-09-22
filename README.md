@@ -43,8 +43,15 @@ The **Bottle Label** tab prints a replacement label for a drug bottle:
 
 The label carries a **GS1 DataMatrix**, the same square code manufacturers
 print on bottles: (01) GTIN from the NDC, (17) expiration, (10) lot,
-(21) serial and (30) quantity. It uses the stock size set under Label Setup.
-3" × 2" is the main layout, and anything under 1.4" tall gets a compact one.
+(21) serial and (30) quantity. Down the right edge there is also a plain
+**Code 128 barcode of the NDC alone** — the ten digits as the manufacturer
+assigned them — for anything that scans a bare NDC, including this tab. It
+runs on its side so it costs the label width rather than its height, and it is
+left off (with a note) when the stock is too short for bars a scanner could
+read. Along the bottom is the date and time the label was printed.
+
+It uses the stock size set under Label Setup. 3" × 2" is the main layout, and
+anything under 1.4" tall gets a compact one.
 
 Notes for changing it:
 - `public/bottle/wedge.js` is what makes a scan work anywhere on the tab: a
@@ -57,9 +64,10 @@ Notes for changing it:
   and the ZPL. Text uses the printer font `^A0`; its character widths are
   measured into a table in `labelcore.js` so every line is shrunk or wrapped
   before it's sent, because ZPL would just run it off the edge.
-- The barcode is encoded by `bwip-js` (served from `node_modules` at
-  `/vendor/bwip-js.js`) and printed as a `^GF` bitmap, so the preview and
-  the printout come from the same bits.
+- The DataMatrix is encoded by `bwip-js` (served from `node_modules` at
+  `/vendor/bwip-js.js`) and the NDC stripe by `public/barcode128.js`. Both
+  print as a `^GF` bitmap rather than `^BC`/`^BX`, so the preview and the
+  printout come from the same bits — rotation and all.
 - An 11-digit NDC is ambiguous (any segment starting with 0 could be the
   padded one). When more than one could be, the FDA lookup decides. If the
   lookup can't, the tab asks for the code with hyphens as printed on the
