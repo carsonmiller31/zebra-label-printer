@@ -8,11 +8,14 @@
  * as a PNG for the on-screen preview, so the preview isn't an approximation of
  * the printout — it is the printout.
  *
- * Swap public/nametag/logo.svg to change the mark. Crop the file to the
- * artwork (no surrounding padding); the layout positions it by its own edges.
+ * Swap public/logo.svg to change the mark. Crop the file to the artwork (no
+ * surrounding padding); the layout positions it by its own edges, and
+ * scripts/make-icon.js centres the app icon on the same bounds.
  */
 var NameTagLogo = (function () {
-  const SRC = '/nametag/logo.svg';
+  /* One file, three places: this tag, the header of the app, and the Windows
+     app icon (scripts/make-icon.js rasterizes it at build time). */
+  const SRC = '/logo.svg';
   const INK = 128;      // alpha (0-255) at which a pixel becomes a dot
   const CACHE_MAX = 8;  // a handful of sizes: one per stock/tag/dpi combination
 

@@ -2,19 +2,37 @@
 
 // Generates build/icon.png (512x512, RGBA) with no third-party dependencies.
 // electron-builder auto-converts this PNG into a multi-resolution .ico for the
-// Windows installer and app. Design: a dark rounded tile with a barcode motif
-// and a teal baseline — matches the app's dark UI.
+// Windows installer and app.
+//
+// The icon is the pharmacy's own mark — the mortar and pestle in public/logo.svg,
+// the same file the name tags print and the app header shows. It is rasterized
+// here at build time by scripts/svgraster.js rather than checked in as a PNG, so
+// replacing the logo is replacing one SVG.
+//
+// Design notes, both of which are about the artwork rather than taste:
+//
+//   * The tile is CREAM, not white and not dark. The mark's swirls are cut out
+//     of the shape as negative space, so whatever is behind it becomes part of
+//     the drawing — on a dark tile the mark collapses into a maroon blob. Cream
+//     rather than pure white so the icon still reads as a tile against the white
+//     of Explorer and the installer.
+//   * The mark is inset well away from the corners. Windows renders this at
+//     16px in the taskbar and title bar, where the fine swirls disappear
+//     entirely and all that survives is the silhouette; crowding the edges would
+//     turn that silhouette into a smudge.
 
 const fs = require('fs');
 const zlib = require('zlib');
 const path = require('path');
+const { rasterize } = require('./svgraster.js');
 
 const SIZE = 512;
 const RADIUS = 96;
+const PADDING = 62; // space between the tile edge and the mark's bounding box
 
-const BG = [15, 17, 21, 255];       // #0f1115
-const BAR = [237, 240, 245, 255];   // near-white barcode bars
-const ACCENT = [45, 212, 191, 255]; // teal baseline (#2dd4bf)
+const TILE = [251, 247, 239, 255];  // cream (#fbf7ef) — the invoice paper's stock
+const MARK = [119, 25, 51, 255];    // the pharmacy maroon (#771933)
+const EDGE = [232, 223, 206, 255];  // a hairline so the tile reads on white
 
 // RGBA pixel buffer.
 const px = Buffer.alloc(SIZE * SIZE * 4);
@@ -24,50 +42,50 @@ function set(x, y, [r, g, b, a]) {
   px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = a;
 }
 
-// Rounded-rectangle mask: is (x,y) inside the tile?
-function inside(x, y) {
-  const rx = Math.min(x, SIZE - 1 - x);
-  const ry = Math.min(y, SIZE - 1 - y);
-  if (rx >= RADIUS || ry >= RADIUS) return true;
+/** Coverage of the rounded tile at (x,y), 0..1, softened at the corners. */
+function tileCoverage(x, y) {
+  const rx = Math.min(x + 0.5, SIZE - 0.5 - x);
+  const ry = Math.min(y + 0.5, SIZE - 0.5 - y);
+  if (rx >= RADIUS || ry >= RADIUS) return 1;
   const dx = RADIUS - rx;
   const dy = RADIUS - ry;
-  return dx * dx + dy * dy <= RADIUS * RADIUS;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  // One pixel of feathering, so the corners aren't stair-stepped.
+  return Math.min(1, Math.max(0, RADIUS + 0.5 - d));
 }
 
-// 1) Fill: rounded tile in BG, transparent outside.
+const blend = (under, over, a) => Math.round(under + (over - under) * a);
+
+// 1) The tile: cream inside, transparent outside, with a hairline edge.
 for (let y = 0; y < SIZE; y++) {
   for (let x = 0; x < SIZE; x++) {
-    set(x, y, inside(x, y) ? BG : [0, 0, 0, 0]);
+    const cov = tileCoverage(x, y);
+    if (cov <= 0) { set(x, y, [0, 0, 0, 0]); continue; }
+    // The outermost ~1.5px of the tile takes the edge colour.
+    const inner = tileCoverage(x, y) === 1 &&
+      x > 1.5 && y > 1.5 && x < SIZE - 2.5 && y < SIZE - 2.5 &&
+      tileCoverage(x - 2, y) === 1 && tileCoverage(x + 2, y) === 1 &&
+      tileCoverage(x, y - 2) === 1 && tileCoverage(x, y + 2) === 1;
+    const c = inner ? TILE : EDGE;
+    set(x, y, [c[0], c[1], c[2], Math.round(255 * cov)]);
   }
 }
 
-// 2) Barcode: variable-width vertical bars filling the middle band edge to edge.
-const widths = [6, 3, 10, 4, 7, 3, 5, 12, 4, 6, 3, 8, 5, 4, 10, 3, 7, 4, 6, 3, 9, 5];
-const barTop = 150;
-const barBottom = 344;
-const barLeft = 108;
-const barRight = SIZE - 108; // 404
-let x = barLeft;
-let draw = true;
-let i = 0;
-while (x < barRight) {
-  const w = widths[i % widths.length];
-  if (draw) {
-    for (let bx = x; bx < x + w && bx < barRight; bx++) {
-      for (let by = barTop; by <= barBottom; by++) {
-        if (inside(bx, by)) set(bx, by, BAR);
-      }
-    }
-  }
-  x += w;
-  draw = !draw;
-  i++;
-}
+// 2) The mark, fitted into the tile less its padding and composited on top.
+const svg = fs.readFileSync(path.join(__dirname, '..', 'public', 'logo.svg'), 'utf8');
+const inner = SIZE - PADDING * 2;
+const { alpha, box } = rasterize(svg, inner, inner);
 
-// 3) Teal baseline under the barcode.
-for (let by = 372; by <= 392; by++) {
-  for (let bx = 108; bx <= SIZE - 108; bx++) {
-    if (inside(bx, by)) set(bx, by, ACCENT);
+for (let y = 0; y < inner; y++) {
+  for (let x = 0; x < inner; x++) {
+    const a = alpha[y * inner + x] / 255;
+    if (!a) continue;
+    const ox = x + PADDING, oy = y + PADDING;
+    const i = (oy * SIZE + ox) * 4;
+    px[i] = blend(px[i], MARK[0], a);
+    px[i + 1] = blend(px[i + 1], MARK[1], a);
+    px[i + 2] = blend(px[i + 2], MARK[2], a);
+    px[i + 3] = Math.max(px[i + 3], Math.round(255 * a));
   }
 }
 
@@ -125,4 +143,7 @@ const outDir = path.join(__dirname, '..', 'build');
 fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, 'icon.png');
 fs.writeFileSync(outPath, png);
-console.log(`Wrote ${outPath} (${png.length} bytes, ${SIZE}x${SIZE})`);
+console.log(
+  `Wrote ${outPath} (${png.length} bytes, ${SIZE}x${SIZE}) — mark at ` +
+  `${Math.round(box.w)}x${Math.round(box.h)} inset ${PADDING}px`,
+);

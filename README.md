@@ -440,6 +440,7 @@ becomes a permanent record.
 | `public/labelcore.js`                 | Font metrics + elements → SVG preview and ZPL      |
 | `public/bottle/`                      | Bottle Label tab: NDC/FDA lookup, GS1, layout, UI  |
 | `public/nametag/`                     | Name Tag tab: logo bitmap, layout, UI              |
+| `public/logo.svg`                     | The pharmacy mark — name tags, header and app icon |
 | `public/paper/`                       | Call-In Script tab: printed form, print bridge, UI |
 | `public/invoices/`                    | Invoices tab: model, Firestore, the sheet, the UI  |
 | `public/invoices/model.js`            | Invoice shape, totals, quantity-in-words, the split |
@@ -450,7 +451,8 @@ becomes a permanent record.
 | `public/paper/drugsearch.js`          | Typo-tolerant matching over that list              |
 | `scripts/build-drug-list.js`          | Rebuilds the list; `scripts/test-search.js` checks it |
 | `electron/preload.js`                 | The only page↔Node bridge: printer list + print job |
-| `scripts/make-icon.js`                | Generates the app icon (no dependencies)           |
+| `scripts/make-icon.js`                | Builds the app icon from `public/logo.svg`         |
+| `scripts/svgraster.js`                | A tiny SVG rasterizer, so that needs no dependency |
 | `.github/workflows/build-windows.yml` | CI that builds the Windows installer               |
 
 ## Notes
@@ -460,3 +462,31 @@ becomes a permanent record.
   shipped inside the app.
 - To change the printer defaults, label stock, or ZPL output, edit the files in
   `public/` — no build step is needed for UI changes during development.
+
+## The logo
+
+`public/logo.svg` is the pharmacy's mortar-and-pestle mark, and **one file
+feeds three places**: the name tags print it as printer dots
+(`public/nametag/logo.js`), the app header shows it, and the Windows app icon
+is built from it (`scripts/make-icon.js` → `build/icon.png`, which
+electron-builder turns into the multi-resolution `.ico`).
+
+To change it, replace that one file and run `npm run make-icon`. Two
+requirements:
+
+- **Crop it to the artwork**, with no surrounding padding. Both the name-tag
+  layout and the icon position the mark by its own edges, so dead space inside
+  the viewBox becomes dead space on the tag.
+- **Everything must be a `<path>`.** `scripts/svgraster.js` is deliberately
+  small — it handles paths, the viewBox and nested group transforms, and throws
+  on anything else rather than quietly skipping it. In Illustrator that means
+  *Object > Path > Outline Stroke* and *Object > Compound Path > Make* before
+  exporting.
+
+The icon is generated rather than committed so that swapping the logo is
+swapping one SVG. It is checked against Chromium's own renderer, not eyeballed:
+the mark is rasterized both ways at the same size and the alpha channels are
+differenced. That test is what caught the bug where the mark's bottom rim went
+missing — this SVG has two groups, only one of which carries the trace
+transform, and an earlier parser applied the first transform it found to every
+path.
