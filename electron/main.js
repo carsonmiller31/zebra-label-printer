@@ -209,9 +209,12 @@ if (!gotLock) {
         cancelId: 1,
         title: 'Update ready',
         message: `Pharmacy Tools ${info && info.version ? info.version : ''} is ready to install.`,
-        detail: 'Restart now to finish updating. If you choose Later, it installs automatically the next time you close the app.',
+        detail: 'Restart now and the app closes, updates and reopens by itself in a few seconds. If you choose Later, it updates the next time you close the app.',
       });
-      if (response === 0) autoUpdater.quitAndInstall();
+      // Silent, then relaunch: no installer wizard to click through (the
+      // installer keeps the existing install folder when run this way), and
+      // the app comes back on its own instead of leaving you to find the icon.
+      if (response === 0) autoUpdater.quitAndInstall(true, true);
     });
 
     const check = () =>

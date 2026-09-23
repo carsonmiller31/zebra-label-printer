@@ -311,6 +311,47 @@ fieldset.drug legend, fieldset.tagsize legend { font-size: 13px; font-weight: 60
 .print-row #bPrint, .print-row #nPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
 .bottle-side .status, .nametag-side .status { margin-top: 0; }
 
+/* ---- Price stickers ---- */
+.print-row #pPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
+fieldset.vendor-pick { border: 0; margin: 0; padding: 0; }
+fieldset.vendor-pick legend { font-size: 13px; color: var(--muted); padding: 0; margin: 0 0 6px; }
+.seg { display: flex; gap: 8px; }
+.seg label {
+  flex: 1; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.seg label:hover { background: var(--panel-2); }
+.seg input { width: auto; margin: 0; accent-color: var(--accent); }
+.seg label:has(input:checked) { border-color: var(--accent); background: rgba(37,99,235,.08); color: #1d4ed8; box-shadow: 0 0 0 1px var(--accent) inset; }
+.seg label:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(37,99,235,.25); }
+.price-entry { align-items: flex-start; }
+.price-entry #pQty { width: 100%; }
+.price-add { flex: none !important; min-width: 0 !important; padding-top: 22px; }
+.price-add button { padding: 12px 22px; font-size: 15px; }
+.price-list { margin: 0 0 6px; max-height: 360px; }
+.price-item { flex-direction: column; align-items: stretch; gap: 4px; }
+.price-item .pi-top, .price-item .pi-bottom { display: flex; align-items: center; gap: 10px; }
+.price-item input.pi-drug {
+  flex: 1; min-width: 0; font-weight: 600; padding: 4px 6px;
+  border: 1px solid transparent; background: transparent;
+}
+.price-item input.pi-drug:hover { border-color: var(--border); }
+.price-item input.pi-drug:focus { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.price-item .pi-vendor { width: 80px; flex: none; padding-left: 6px; color: var(--muted); }
+.price-item .pi-price { flex: 1; font-size: 15px; }
+.price-item .pi-code { margin-left: 10px; font-weight: 700; letter-spacing: .06em; }
+.price-item .pi-times { color: var(--muted); }
+.price-item input.pi-qty { width: 72px; flex: none; padding: 4px 8px; }
+details.price-code { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--panel-2); }
+details.price-code summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+details.price-code[open] summary { margin-bottom: 12px; }
+details.price-code #pCodeWord { text-transform: uppercase; letter-spacing: .1em; }
+#pPriceHint { font-weight: 600; letter-spacing: .04em; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.pager button { padding: 2px 12px; font-size: 18px; line-height: 1.2; }
+.tone-muted { color: var(--muted); }
+
 .zpl-details summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .zpl-details textarea { margin-top: 8px; font-size: 11px; min-height: 160px; }
 

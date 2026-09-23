@@ -147,7 +147,7 @@ function applyLabelSize() {
 const modeBtns = [...document.querySelectorAll('.mode-btn')];
 const modeSubEl = $('#modeSub');
 const MODE_SUB = {
-  zebra: 'Print bottle labels from an NDC, staff name tags, or design your own labels.',
+  zebra: 'Print bottle labels from an NDC, staff name tags, price stickers, or design your own labels.',
   paper: 'Take a prescription over the phone and print it on the top half of a sheet.',
   invoices: 'Write a drug transfer or purchase invoice, save it to the record, and print it.',
 };

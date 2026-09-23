@@ -18,7 +18,7 @@
             <img class="brand-mark" src="/logo.svg" alt="" width="46" height="40" />
             <h1>Pharmacy Tools</h1>
           </div>
-          <p id="modeSub">Print bottle labels from an NDC, staff name tags, or design your own labels.</p>
+          <p id="modeSub">Print bottle labels from an NDC, staff name tags, price stickers, or design your own labels.</p>
         </div>
         <div class="mode-switch" role="tablist" aria-label="Printer">
           <button type="button" role="tab" class="mode-btn" id="mode-zebra"
@@ -94,6 +94,7 @@
     <nav class="tabs" id="zebraTabs" role="tablist" aria-label="Label type">
       <button type="button" role="tab" class="tab" id="tab-bottle" data-tab="bottle" aria-controls="panel-bottle">Bottle Label</button>
       <button type="button" role="tab" class="tab" id="tab-nametag" data-tab="nametag" aria-controls="panel-nametag">Name Tag</button>
+      <button type="button" role="tab" class="tab" id="tab-price" data-tab="price" aria-controls="panel-price">Price Stickers</button>
       <button type="button" role="tab" class="tab" id="tab-designer" data-tab="designer" aria-controls="panel-designer">Label Designer</button>
     </nav>
 
@@ -266,6 +267,93 @@
           <details class="zpl-details">
             <summary>Show ZPL</summary>
             <textarea id="nZpl" spellcheck="false" readonly></textarea>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Price stickers: vendor + price, six to a label, cut apart -->
+    <section class="card price" id="panel-price" role="tabpanel" aria-labelledby="tab-price" hidden>
+      <div class="nametag-grid">
+        <div class="nametag-form price-form">
+          <div class="field">
+            <label for="pDrug">Drug <span class="opt">— scan the bottle, anywhere on this tab, or type it</span></label>
+            <input id="pDrug" class="big" type="text" autocomplete="off" spellcheck="false" placeholder="Atorvastatin 40 mg" />
+            <div id="pDrugStatus" class="lookup" aria-live="polite"></div>
+          </div>
+
+          <fieldset class="vendor-pick">
+            <legend>Vendor</legend>
+            <div class="seg">
+              <label><input type="radio" name="pVendor" value="Cardinal" /> Cardinal</label>
+              <label><input type="radio" name="pVendor" value="Auburn" /> Auburn</label>
+            </div>
+          </fieldset>
+
+          <div class="row price-entry">
+            <div style="flex:2;">
+              <label for="pPrice">Price <span class="opt">— prints as its code</span></label>
+              <input id="pPrice" class="mono big" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="12.99" />
+              <div class="hint" id="pPriceHint"></div>
+            </div>
+            <div>
+              <label for="pQty">Quantity</label>
+              <input id="pQty" class="mono big" type="number" min="1" max="999" value="1" />
+            </div>
+            <div class="price-add">
+              <button type="button" id="pAdd">Add</button>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:-8px;">
+            Scan, type the price, press Enter — repeat. Typing <strong>C</strong> or <strong>A</strong> in the price box
+            switches to Cardinal or Auburn. When the list is done, press Enter in the empty price box to print.
+          </div>
+
+          <div>
+            <div id="pList" class="batch-list price-list"></div>
+            <div id="pSummary" class="hint"></div>
+          </div>
+
+          <details class="price-code">
+            <summary>Price code <span class="opt">— <span id="pCodeKey" class="mono"></span></span></summary>
+            <div class="row">
+              <div style="flex:2;">
+                <label for="pCodeWord">Code word <span class="opt">— 10 letters, none repeated</span></label>
+                <input id="pCodeWord" class="mono" type="text" maxlength="10" autocomplete="off" spellcheck="false" />
+                <div class="hint err-text" id="pCodeError"></div>
+              </div>
+              <div>
+                <label for="pCodeStart">First letter stands for</label>
+                <select id="pCodeStart">
+                  <option value="1">1 (last letter is 0)</option>
+                  <option value="0">0</option>
+                </select>
+              </div>
+            </div>
+            <div class="hint">Every digit of the price becomes a letter; the $ and the decimal point are left off, so the last two letters are always the cents.</div>
+          </details>
+        </div>
+
+        <div class="nametag-side price-side">
+          <div class="preview-stage">
+            <div id="pPreview" class="preview-label" aria-label="Sticker sheet preview"></div>
+          </div>
+          <div class="pager">
+            <button type="button" class="secondary small" id="pPrev" aria-label="Previous label">&lsaquo;</button>
+            <span id="pPageInfo">Preview</span>
+            <button type="button" class="secondary small" id="pNext" aria-label="Next label">&rsaquo;</button>
+          </div>
+          <div class="hint" id="pSizeInfo"></div>
+          <ul class="notes" id="pNotes"></ul>
+
+          <div class="print-row">
+            <button type="button" id="pPrint">Print</button>
+            <button type="button" class="secondary" id="pClear">Clear List</button>
+          </div>
+          <div id="pStatus" class="status" aria-live="polite"></div>
+          <details class="zpl-details">
+            <summary>Show ZPL <span class="opt">— the label shown above</span></summary>
+            <textarea id="pZpl" spellcheck="false" readonly></textarea>
           </details>
         </div>
       </div>
@@ -661,6 +749,8 @@
   <script src="/nametag/logo.js"></script>
   <script src="/nametag/layout.js"></script>
   <script src="/nametag/ui.js"></script>
+  <script src="/price/layout.js"></script>
+  <script src="/price/ui.js"></script>
   <script src="/paper/drugs.js"></script>
   <script src="/paper/drugsearch.js"></script>
   <script src="/paper/form.js"></script>
