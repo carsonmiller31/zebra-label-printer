@@ -1,6 +1,7 @@
 node_modules/
 release/
 build/icon.png
+build/icon.ico
 firebase-debug.log
 *.log
 .DS_Store

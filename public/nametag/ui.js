@@ -3,7 +3,7 @@
  * The Name Tag tab.
  *
  * Type a name, pick a title, print. The tag is laid out 3" x 1" in the middle
- * of whatever stock is loaded, with dashed lines to cut along.
+ * of whatever stock is loaded, with dashed lines to cut along (optional).
  *
  * Uses from app.js: LABEL_W, LABEL_H, dpiEl, ipEl, postPrint(),
  * withPrintSettings(), askConfirm().
@@ -12,7 +12,7 @@
   const $ = (sel) => document.querySelector(sel);
   const f = {
     name: $('#nName'), title: $('#nTitle'), titleOther: $('#nTitleOther'),
-    tagW: $('#nTagW'), tagH: $('#nTagH'), copies: $('#nCopies'),
+    tagW: $('#nTagW'), tagH: $('#nTagH'), copies: $('#nCopies'), cutLines: $('#nCutLines'),
   };
   const ui = {
     preview: $('#nPreview'), sizeInfo: $('#nSizeInfo'), cutHint: $('#nCutHint'),
@@ -25,6 +25,7 @@
   f.tagW.value = localStorage.getItem('zebra_tag_w') || String(NameTagLayout.TAG_W_IN);
   f.tagH.value = localStorage.getItem('zebra_tag_h') || String(NameTagLayout.TAG_H_IN);
   f.titleOther.value = localStorage.getItem('zebra_tag_title_custom') || '';
+  f.cutLines.checked = localStorage.getItem('zebra_tag_cutlines') !== 'off';
   const savedTitle = localStorage.getItem('zebra_tag_title');
   if (savedTitle && [...f.title.options].some((o) => o.value === savedTitle)) {
     f.title.value = savedTitle;
@@ -35,6 +36,7 @@
     localStorage.setItem('zebra_tag_h', f.tagH.value);
     localStorage.setItem('zebra_tag_title', f.title.value);
     localStorage.setItem('zebra_tag_title_custom', f.titleOther.value);
+    localStorage.setItem('zebra_tag_cutlines', f.cutLines.checked ? 'on' : 'off');
   }
 
   /** The title as it will print, or '' for none. */
@@ -74,7 +76,7 @@
       logoError = e.message;
     }
     const layout = NameTagLayout.build(
-      { name: f.name.value.trim(), title: title(), logo }, s, tag,
+      { name: f.name.value.trim(), title: title(), logo, cutLines: f.cutLines.checked }, s, tag,
     );
     return { layout, spec: s, tag };
   }
@@ -106,9 +108,11 @@
     ui.sizeInfo.textContent =
       `${fmtIn(box.w / dpi)}" × ${fmtIn(box.h / dpi)}" tag on ${fmtIn(W / dpi)}" × ${fmtIn(H / dpi)}" ` +
       `stock at ${dpi} dpi — change the stock under Label Setup.`;
-    ui.cutHint.textContent = c.layout.cut
-      ? 'The tag prints in the middle of the label; cut along the dashed lines.'
-      : 'The tag fills the whole label, so there is nothing to cut off.';
+    ui.cutHint.textContent = !c.layout.cut
+      ? 'The tag fills the whole label, so there is nothing to cut off.'
+      : f.cutLines.checked
+        ? 'The tag prints in the middle of the label; cut along the dashed lines.'
+        : 'The tag prints in the middle of the label, with no lines around it.';
 
     const notes = [];
     if (!f.name.value.trim()) notes.push({ text: 'Enter the name.', tone: 'err' });
@@ -219,6 +223,7 @@
       render();
     });
   }
+  f.cutLines.addEventListener('change', () => { saveSettings(); render(); });
   ui.print.addEventListener('click', print);
   ui.clear.addEventListener('click', newTag);
   document.addEventListener('labelsize', render);

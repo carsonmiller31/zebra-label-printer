@@ -317,42 +317,88 @@ function fillPath(mask, W, H, polys) {
  *   artwork actually landed, which is what a caller needs to place anything
  *   else relative to it.
  */
-function rasterize(svgText, width, height) {
+function rasterize(svgText, width, height, opts = {}) {
   const { vx, vy, vw, vh, paths } = parseSvg(svgText);
+  const ss = opts.supersample || SS;
+  const grow = opts.grow || 0;          // outward offset, in OUTPUT pixels
+  const skip = new Set(opts.skip || []); // path indices (document order) to leave out
 
   // Fit the viewBox into the target box, preserving aspect (SVG's "meet").
   const scale = Math.min(width / vw, height / vh);
   const drawW = vw * scale, drawH = vh * scale;
   const offX = (width - drawW) / 2, offY = (height - drawH) / 2;
 
-  const W = width * SS, H = height * SS;
-  const mask = new Uint8Array(W * H);
+  const W = width * ss, H = height * ss;
+  let mask = new Uint8Array(W * H);
 
   // user space → the transforms in scope → viewBox origin → fitted box → samples
   const toDevice = (m) => (p) => {
     const q = applyMatrix(m, p.x, p.y);
-    return { x: (offX + (q.x - vx) * scale) * SS, y: (offY + (q.y - vy) * scale) * SS };
+    return { x: (offX + (q.x - vx) * scale) * ss, y: (offY + (q.y - vy) * scale) * ss };
   };
 
-  for (const entry of paths) {
+  paths.forEach((entry, i) => {
+    if (skip.has(i)) return;
     fillPath(mask, W, H, flatten(entry.d).map((poly) => poly.map(toDevice(entry.matrix))));
-  }
+  });
+
+  if (grow > 0) mask = dilate(mask, W, H, grow * ss);
 
   // Box-downsample the supersamples into 0-255 coverage.
   const alpha = new Uint8Array(width * height);
-  const total = SS * SS;
+  const total = ss * ss;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       let hits = 0;
-      for (let sy = 0; sy < SS; sy++) {
-        const row = (y * SS + sy) * W + x * SS;
-        for (let sx = 0; sx < SS; sx++) hits += mask[row + sx];
+      for (let sy = 0; sy < ss; sy++) {
+        const row = (y * ss + sy) * W + x * ss;
+        for (let sx = 0; sx < ss; sx++) hits += mask[row + sx];
       }
       alpha[y * width + x] = Math.round((hits / total) * 255);
     }
   }
 
   return { alpha, box: { x: offX, y: offY, w: drawW, h: drawH } };
+}
+
+/**
+ * Grow a coverage mask outward by `r` samples (a disc-shaped dilation) — the
+ * raster equivalent of adding a stroke of width 2r around every shape. Used to
+ * thicken hairlines at icon sizes where they would otherwise render as faint,
+ * broken threads. Done as a horizontal run-length pass per disc row, so the
+ * cost is O(pixels * r) rather than O(pixels * r^2).
+ */
+function dilate(mask, W, H, r) {
+  const out = new Uint8Array(W * H);
+  const R = Math.ceil(r);
+  // Half-width of the disc at each vertical offset.
+  const half = [];
+  for (let dy = -R; dy <= R; dy++) half.push(Math.floor(Math.sqrt(Math.max(0, r * r - dy * dy))));
+  // Distance to the nearest set sample in each row, within +-R, via prefix scans.
+  const near = new Int32Array(W * H).fill(R + 1);
+  for (let y = 0; y < H; y++) {
+    const row = y * W;
+    let last = -Infinity;
+    for (let x = 0; x < W; x++) {
+      if (mask[row + x]) last = x;
+      near[row + x] = Math.min(R + 1, x - last);
+    }
+    last = Infinity;
+    for (let x = W - 1; x >= 0; x--) {
+      if (mask[row + x]) last = x;
+      near[row + x] = Math.min(near[row + x], last - x);
+    }
+  }
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      for (let k = 0; k < half.length; k++) {
+        const yy = y + k - R;
+        if (yy < 0 || yy >= H) continue;
+        if (near[yy * W + x] <= half[k]) { out[y * W + x] = 1; break; }
+      }
+    }
+  }
+  return out;
 }
 
 module.exports = { rasterize, parseSvg, flatten, parseTransform, compose };

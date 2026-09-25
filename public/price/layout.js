@@ -3,8 +3,9 @@
  * Price sticker layout.
  *
  * Six little stickers to a label, dashed lines between them to cut along.
- * Each carries the drug, the price as a Charleston code (never the price
- * itself), the vendor and the date it was printed:
+ * Each carries the drug, the price — as a Charleston code by default, or as
+ * the plain price when the tab is switched to it — the vendor and the date it
+ * was printed:
  *
  *   +---------------------+---------------------+
  *   | Atorvastatin 40 mg  |  Lisinopril 10 mg   |
@@ -96,12 +97,15 @@ var PriceLayout = (function () {
 
   /**
    * [{ vendor, cents, qty, drug }] → one entry per physical sticker, in order,
-   * as the text it prints: { drug, code, vendor }.
+   * as the text it prints: { drug, code, vendor }. `code` is the big middle
+   * line — the Charleston code, or with show = 'price' the price itself
+   * ("$12.99"); the layout sizes whichever it is the same way.
    */
-  function expand(entries, word = CODE_WORD, start = 1) {
+  function expand(entries, word = CODE_WORD, start = 1, show = 'code') {
     const out = [];
     for (const e of entries) {
-      const s = { drug: e.drug || '', code: priceCode(e.cents, word, start), vendor: e.vendor };
+      const code = show === 'price' ? formatPrice(e.cents) : priceCode(e.cents, word, start);
+      const s = { drug: e.drug || '', code, vendor: e.vendor };
       for (let i = 0; i < e.qty; i++) out.push(s);
     }
     return out;

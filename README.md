@@ -107,7 +107,8 @@ A name tag is **3" × 1"**, which is smaller than the 3" × 2" stock the printer
 is usually loaded with, so the tag prints in the middle of the label with
 dashed lines around it to cut along. Change the finished size under **Finished
 tag size** if the tags you use are different; when it matches the stock exactly
-there is nothing to cut and no lines are printed.
+there is nothing to cut and no lines are printed. To print the tag without the
+lines, untick **Print dashed cut lines around the tag** (remembered between runs).
 
 Notes for changing it:
 - The mark is `public/nametag/logo.svg`. Swap that file to change the logo —
@@ -421,7 +422,7 @@ Notes:
 npm install
 npm start          # launch the Electron app
 npm run server     # run just the label server (browser at the printed URL)
-npm run make-icon  # regenerate build/icon.png
+npm run make-icon  # regenerate build/icon.ico + build/icon.png
 npm run vendor     # re-copy the Firebase SDK + invoice fonts into public/
 ```
 
@@ -451,7 +452,8 @@ becomes a permanent record.
 | `public/paper/drugsearch.js`          | Typo-tolerant matching over that list              |
 | `scripts/build-drug-list.js`          | Rebuilds the list; `scripts/test-search.js` checks it |
 | `electron/preload.js`                 | The only page↔Node bridge: printer list + print job |
-| `scripts/make-icon.js`                | Builds the app icon from `public/logo.svg`         |
+| `scripts/make-icon.js`                | Builds the app icon (`.ico` + `.png`) from `public/logo.svg` |
+| `scripts/icon-glyph.js`               | The simplified mark the icon uses at 16–48 px      |
 | `scripts/svgraster.js`                | A tiny SVG rasterizer, so that needs no dependency |
 | `.github/workflows/build-windows.yml` | CI that builds the Windows installer               |
 
@@ -468,8 +470,17 @@ becomes a permanent record.
 `public/logo.svg` is the pharmacy's mortar-and-pestle mark, and **one file
 feeds three places**: the name tags print it as printer dots
 (`public/nametag/logo.js`), the app header shows it, and the Windows app icon
-is built from it (`scripts/make-icon.js` → `build/icon.png`, which
-electron-builder turns into the multi-resolution `.ico`).
+is built from it (`scripts/make-icon.js` → `build/icon.ico` and
+`build/icon.png`).
+
+The `.ico` is built by the script, not by electron-builder: given a PNG,
+electron-builder writes an `.ico` holding a single 256px image, and Windows
+shrinking that to taskbar size is what made the old icon pixelated and
+stringy. Each size is rendered from vectors at its own pixel size instead —
+the logo itself from 64px up, and from 48px down a hand-simplified mortar and
+pestle (`scripts/icon-glyph.js`), because the logo's hairline swirls are
+narrower than a pixel there. Cream on a maroon tile, so it holds up on light
+and dark taskbars alike.
 
 To change it, replace that one file and run `npm run make-icon`. Two
 requirements:

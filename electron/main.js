@@ -56,7 +56,9 @@ if (!gotLock) {
       title: 'Pharmacy Tools',
       backgroundColor: '#0f1115',
       show: false,
-      icon: path.join(__dirname, '..', 'build', 'icon.png'),
+      // On Windows the .ico, so the title bar and taskbar pick the size drawn
+      // for them instead of shrinking the 512px PNG (see scripts/make-icon.js).
+      icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,

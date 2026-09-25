@@ -244,6 +244,10 @@
                 <input id="nTagH" type="number" step="0.05" min="0.5" value="1" />
               </div>
             </div>
+            <div class="check-row">
+              <input type="checkbox" id="nCutLines" checked />
+              <label for="nCutLines">Print dashed cut lines around the tag</label>
+            </div>
             <div class="hint" id="nCutHint"></div>
           </fieldset>
         </div>
@@ -290,9 +294,17 @@
             </div>
           </fieldset>
 
+          <fieldset class="vendor-pick">
+            <legend>Price prints as</legend>
+            <div class="seg">
+              <label><input type="radio" name="pShow" value="code" /> Charleston code</label>
+              <label><input type="radio" name="pShow" value="price" /> Actual price</label>
+            </div>
+          </fieldset>
+
           <div class="row price-entry">
             <div style="flex:2;">
-              <label for="pPrice">Price <span class="opt">— prints as its code</span></label>
+              <label for="pPrice">Price <span class="opt" id="pPriceOpt">— prints as its code</span></label>
               <input id="pPrice" class="mono big" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="12.99" />
               <div class="hint" id="pPriceHint"></div>
             </div>

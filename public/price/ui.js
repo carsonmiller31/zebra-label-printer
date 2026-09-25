@@ -5,8 +5,8 @@
  * Scan the drug, pick the vendor, type the price and how many, press Enter —
  * over and over — then Print. The stickers go out six to a label with dashed
  * lines to cut along. Each one carries the drug's name and strength, the
- * price as a Charleston code (the price itself never prints), the vendor and
- * today's date.
+ * price as a Charleston code (or, switched under "Price prints as", the plain
+ * price), the vendor and today's date.
  *
  * Quick entry: a scan anywhere on the tab fills in the drug from the FDA's
  * NDC directory and puts the cursor in the price box. Enter there adds the
@@ -28,11 +28,13 @@
     drug: $('#pDrug'),
     vendors: [...document.querySelectorAll('input[name="pVendor"]')],
     price: $('#pPrice'), qty: $('#pQty'),
+    show: [...document.querySelectorAll('input[name="pShow"]')],
     codeWord: $('#pCodeWord'), codeStart: $('#pCodeStart'),
   };
   const ui = {
     panel: $('#panel-price'),
     drugStatus: $('#pDrugStatus'), priceHint: $('#pPriceHint'), codeKey: $('#pCodeKey'),
+    priceOpt: $('#pPriceOpt'),
     codeError: $('#pCodeError'),
     add: $('#pAdd'), list: $('#pList'), summary: $('#pSummary'),
     preview: $('#pPreview'), prev: $('#pPrev'), next: $('#pNext'), pageInfo: $('#pPageInfo'),
@@ -45,6 +47,7 @@
   const VENDOR_KEY = 'zebra_price_vendor';
   const WORD_KEY = 'zebra_price_code_word';
   const START_KEY = 'zebra_price_code_start';
+  const SHOW_KEY = 'zebra_price_show';
 
   // ---- State --------------------------------------------------------------
 
@@ -94,6 +97,16 @@
   const codeStart = () => (f.codeStart.value === '0' ? 0 : 1);
   const codeError = () => PriceLayout.checkCodeWord(codeWord());
   const codeOf = (cents) => PriceLayout.priceCode(cents, codeWord(), codeStart());
+
+  // What the big middle line prints: the Charleston code, or the price itself.
+  // One setting for the whole print job, remembered between runs.
+  const savedShow = localStorage.getItem(SHOW_KEY) === 'price' ? 'price' : 'code';
+  for (const r of f.show) r.checked = r.value === savedShow;
+  const showPrice = () => f.show.some((r) => r.checked && r.value === 'price');
+  /** The code word's problem, but only when the code is what's printing. */
+  const blockingError = () => (showPrice() ? '' : codeError());
+  /** What a price prints as on the sticker. */
+  const printedAs = (cents) => (showPrice() ? PriceLayout.formatPrice(cents) : codeOf(cents));
 
   /** "C=1 H=2 A=3 … N=0", the key for whoever's reading the stickers. */
   function renderCodeKey() {
@@ -295,7 +308,8 @@
       price.textContent = PriceLayout.formatPrice(e.cents);
       const code = document.createElement('span');
       code.className = 'pi-code mono';
-      code.textContent = codeError() ? '' : codeOf(e.cents);
+      // The code alongside the price — nothing to add when the price is what prints.
+      code.textContent = codeError() || showPrice() ? '' : codeOf(e.cents);
       price.append(code);
 
       const qty = document.createElement('input');
@@ -353,7 +367,8 @@
   function job() {
     const s = spec();
     const date = PriceLayout.dateText();
-    const stickers = codeError() ? [] : PriceLayout.expand(toPrint(), codeWord(), codeStart());
+    const stickers = blockingError() ? []
+      : PriceLayout.expand(toPrint(), codeWord(), codeStart(), showPrice() ? 'price' : 'code');
     const pages = PriceLayout.paginate(stickers);
     const plan = PriceLayout.plan(stickers, s, date);
     return { spec: s, date, stickers, pages, plan };
@@ -373,7 +388,8 @@
 
     const p = pending();
     ui.priceHint.className = `hint${p.error ? ' tone-err' : ''}`;
-    if (p.entry && !codeError()) ui.priceHint.textContent = `Prints as ${codeOf(p.entry.cents)}`;
+    ui.priceOpt.textContent = showPrice() ? '— prints as the price' : '— prints as its code';
+    if (p.entry && !blockingError()) ui.priceHint.textContent = `Prints as ${printedAs(p.entry.cents)}`;
     else if (p.error) ui.priceHint.textContent = p.error;
     else if (!adding) ui.priceHint.textContent = '';
 
@@ -388,8 +404,8 @@
     ui.next.disabled = pageIndex >= count - 1;
 
     const notes = [];
-    if (codeError()) {
-      notes.push({ text: `${codeError()} Fix it under Price code.`, tone: 'err' });
+    if (blockingError()) {
+      notes.push({ text: `${blockingError()} Fix it under Price code, or print the actual price.`, tone: 'err' });
     }
     if (!j.plan) {
       ui.preview.innerHTML = '';
@@ -455,8 +471,8 @@
   }
 
   async function printNow() {
-    if (codeError()) {
-      showStatus(false, `✗ ${codeError()} Fix it under Price code.`);
+    if (blockingError()) {
+      showStatus(false, `✗ ${blockingError()} Fix it under Price code.`);
       return;
     }
     const p = pending();
@@ -589,6 +605,12 @@
   });
 
   for (const r of f.vendors) r.addEventListener('change', () => setVendor(r.value));
+  for (const r of f.show) {
+    r.addEventListener('change', () => {
+      localStorage.setItem(SHOW_KEY, r.value);
+      render();
+    });
+  }
   f.codeWord.addEventListener('input', () => {
     if (!codeError()) localStorage.setItem(WORD_KEY, codeWord());
     render();

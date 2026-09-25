@@ -99,7 +99,8 @@ var NameTagLayout = (function () {
   }
 
   /**
-   * input: { name, title, logo }   logo = { w, h, rows, png } or null
+   * input: { name, title, logo, cutLines }
+   *        logo = { w, h, rows, png } or null; cutLines false = no dashed guides
    * spec:  { W, H, dpi }           the loaded stock, in dots
    * tag:   { wIn, hIn }            the finished tag size, in inches
    * → { elements, notes, fits, box, cut }
@@ -113,10 +114,12 @@ var NameTagLayout = (function () {
       notes.push('The tag is bigger than the label that is loaded, so it was trimmed to the label.');
     }
 
-    // Dashed cut guides around the tag, in the waste.
+    // Dashed cut guides around the tag, in the waste — unless turned off.
+    // `cut` still reports whether there is waste to cut away, lines or not.
     let cut = false;
+    const guides = input.cutLines === false ? [] : els;
     for (const side of ['top', 'bottom', 'left', 'right']) {
-      if (cutLine(els, spec, box, side)) cut = true;
+      if (cutLine(guides, spec, box, side)) cut = true;
     }
 
     const unit = Math.min(box.w, box.h); // the short side: what the type has to live within
