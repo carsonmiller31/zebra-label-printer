@@ -295,6 +295,44 @@ var InvoiceSheetHtml = (function () {
 .sheet .split-note ul { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .sheet .split-label { font-weight: 700; color: var(--inv-ink); margin-right: 5px; }
 .sheet .split-tax { margin-top: 4px; color: var(--inv-ink-mute); }
+
+/* ---- The general invoice (generalSheet below) ---------------------------
+   Same paper and the same mono-laser rules as the drug slip: outlines and
+   weight carry the hierarchy, never a fill. */
+.sheet .gen-head { padding-bottom: 16px; }
+.sheet .gen-title {
+  font-family: var(--inv-display); font-weight: 900; font-size: 34px;
+  line-height: 1; letter-spacing: 0.14em; text-transform: uppercase; color: #111;
+  /* The tracking trails the last letter; pull it back to the right edge. */
+  margin-right: -0.14em;
+}
+.sheet .gen-meta {
+  display: grid; grid-template-columns: auto auto; justify-content: end;
+  column-gap: 10px; margin: 10px 0 0; font-size: 11px; line-height: 1.75;
+}
+.sheet .gen-meta dt {
+  font-family: var(--inv-display); font-size: 9px; font-weight: 800;
+  letter-spacing: 0.11em; text-transform: uppercase; color: #111; align-self: center;
+}
+.sheet .gen-meta dd { margin: 0; }
+.sheet .gen-parties { display: grid; grid-template-columns: 1fr 236px; gap: 20px; margin-top: 18px; }
+.sheet .gen-due {
+  border: 2px solid #111; border-radius: 4px; padding: 10px 14px 12px;
+  display: flex; flex-direction: column; justify-content: center; text-align: right;
+}
+.sheet .gen-due .micro-heading { text-align: right; }
+.sheet .gen-due-amount {
+  font-family: var(--inv-display); font-size: 30px; font-weight: 900; line-height: 1.1;
+  margin-top: 4px; font-variant-numeric: tabular-nums; color: #111;
+}
+.sheet .gen-due-amount.code { font-family: var(--inv-display); font-size: 30px; }
+.sheet .gen-due-when { font-size: 11px; font-weight: 600; margin-top: 3px; color: #111; }
+.sheet .gen-items { margin-top: 20px; }
+.sheet .gen-totals { width: 260px; }
+/* Pushed to the foot so the page always looks whole. */
+.sheet .gen-foot { margin-top: auto; padding-top: 28px; }
+.sheet .gen-thanks { font-family: var(--inv-display); font-weight: 800; font-size: 16px; color: #111; }
+.sheet .gen-ask { font-size: 11px; margin-top: 4px; color: #111; }
 `;
 
   // ===========================================================================
@@ -363,6 +401,9 @@ var InvoiceSheetHtml = (function () {
    */
   function sheet(invoice, opts) {
     const o = opts || {};
+    /* A bill for anything that isn't drugs is a different document, not a
+       relabelled one — no DEA, NDC or schedules — so it has its own layout. */
+    if (invoice.docType === 'general') return generalSheet(invoice, o);
     const edit = !!o.edit;
     const from = I.locationById(invoice.fromLocationId);
     const isPurchase = invoice.docType === 'purchase';
@@ -487,31 +528,37 @@ var InvoiceSheetHtml = (function () {
 </div>`;
   }
 
+  /** "Save to directory" beside the typed party's heading, while editing. */
+  function clientSaveButton(to, edit, dir) {
+    if (!edit || !dir || !to.name.trim()) return '';
+    return dir.status === 'saved'
+      ? `<span class="client-saved">In directory</span>`
+      : `<button type="button" class="client-save" data-act="save-client"${dir.busy ? ' disabled' : ''}>${
+          dir.busy ? 'Saving…' : dir.status === 'changed' ? 'Update saved entry' : 'Save to directory'}</button>`;
+  }
+
+  /* The name doubles as a search box over the saved directory: typing a few
+     letters and picking fills the whole block — address, phone, fax and DEA —
+     which is the tedious half of writing one of these. A general invoice
+     bills anyone, so the prompt isn't always a pharmacy. */
+  function clientNameSpot(to, edit, dir, placeholder) {
+    return edit && dir
+      ? `<div class="client-picker">
+           <input class="slot party-name block" value="${esc(to.name)}" placeholder="${esc(placeholder)}"
+                  data-bind="to.name" data-picker="1" autocomplete="off" spellcheck="false"
+                  data-1p-ignore data-lpignore="true" role="combobox" aria-expanded="false"
+                  aria-autocomplete="list" aria-label="${esc(placeholder)} — type to search the saved directory">
+           <div data-out="client-list"></div>
+         </div>`
+      : slot(edit, to.name, { bind: 'to.name', placeholder, className: 'party-name', block: true });
+  }
+
   /** The receiving pharmacy — the half that is typed, and can be looked up. */
   function toBlock(invoice, edit, isPurchase, o) {
     const to = invoice.to;
     const dir = (o && o.clients) || null;
-
-    let saveBtn = '';
-    if (edit && dir && to.name.trim()) {
-      saveBtn = dir.status === 'saved'
-        ? `<span class="client-saved">In directory</span>`
-        : `<button type="button" class="client-save" data-act="save-client"${dir.busy ? ' disabled' : ''}>${
-            dir.busy ? 'Saving…' : dir.status === 'changed' ? 'Update saved pharmacy' : 'Save to directory'}</button>`;
-    }
-
-    /* The pharmacy name doubles as a search box over the saved directory:
-       typing a few letters and picking fills the whole block — address,
-       phone, fax and DEA — which is the tedious half of writing one of these. */
-    const nameSpot = edit && dir
-      ? `<div class="client-picker">
-           <input class="slot party-name block" value="${esc(to.name)}" placeholder="Pharmacy name"
-                  data-bind="to.name" data-picker="1" autocomplete="off" spellcheck="false"
-                  data-1p-ignore data-lpignore="true" role="combobox" aria-expanded="false"
-                  aria-autocomplete="list" aria-label="Pharmacy name — type to search saved pharmacies">
-           <div data-out="client-list"></div>
-         </div>`
-      : slot(edit, to.name, { bind: 'to.name', placeholder: 'Pharmacy name', className: 'party-name', block: true });
+    const saveBtn = clientSaveButton(to, edit, dir);
+    const nameSpot = clientNameSpot(to, edit, dir, 'Pharmacy name');
 
     const contact = edit
       ? `<div class="code">Ph ${slot(true, to.phone, { bind: 'to.phone', placeholder: 'phone', width: 100 })}
@@ -531,9 +578,9 @@ var InvoiceSheetHtml = (function () {
     </div>`;
   }
 
-  const padRows = (n) => {
+  const padRows = (n, cols) => {
     let out = '';
-    for (let i = 0; i < n; i++) out += '<tr><td colspan="7">&nbsp;</td></tr>';
+    for (let i = 0; i < n; i++) out += `<tr><td colspan="${cols || 7}">&nbsp;</td></tr>`;
     return out;
   };
 
@@ -618,6 +665,177 @@ var InvoiceSheetHtml = (function () {
   }
 
   // ===========================================================================
+  // The general invoice
+  // ===========================================================================
+  //
+  // A bill for anything that isn't drugs, to anyone — a port of the manual's
+  // GeneralSheet.tsx. Same paper, type and edit-in-place slots as the drug
+  // slip, but none of its regulatory furniture: no DEA on either side, no NDC,
+  // lot, expiry or schedule, no signature lines, and it never splits into
+  // separate sheets (see sheetsFor in model.js). What it adds is what a
+  // customer reading a bill looks for first — who it's for, how much, and
+  // when it's due.
+
+  /** Fewer than the drug slip: a bill with three lines shouldn't look empty. */
+  const GENERAL_MIN_ROWS = 4;
+
+  /** Under the big total: the due date if there is one, else the number. */
+  const dueWhen = (due, number) =>
+    due ? `Due by ${I.longDate(due)}` : `Invoice no. ${number}`;
+
+  function generalSheet(invoice, o) {
+    const edit = !!o.edit;
+    const from = I.locationById(invoice.fromLocationId);
+    const rows = edit ? invoice.items : invoice.items.filter(I.hasContent);
+    const padding = Math.max(0, GENERAL_MIN_ROWS - rows.length);
+    const t = I.totals(invoice);
+    const due = invoice.dueDate || '';
+    const number = invoice.invoiceNumber || '—';
+    const to = invoice.to;
+    const dir = o.clients || null;
+
+    const wordmark = edit
+      ? `<select class="slot slot-wordmark" data-bind="fromLocationId" title="Which of our two shops this is from">` +
+        I.ourLocations.map((l) =>
+          `<option value="${esc(l.id)}"${l.id === invoice.fromLocationId ? ' selected' : ''}>${esc(l.name)}</option>`).join('') +
+        `</select>`
+      : `<div class="wordmark">${esc(from.name)}</div>`;
+
+    const dateSpot = (bind, value, title) => edit
+      ? `<input type="date" class="slot date-slot" value="${esc(value)}" data-bind="${bind}"${
+          title ? ` title="${esc(title)}"` : ''}>`
+      : `<span class="font-bold">${esc(I.longDate(value) || '—')}</span>`;
+
+    const contact = edit
+      ? `<div>Ph ${slot(true, to.phone, { bind: 'to.phone', placeholder: 'phone', width: 104 })}
+           &middot; Fax ${slot(true, to.fax, { bind: 'to.fax', placeholder: 'fax', width: 104 })}</div>`
+      : `<div>${esc(I.contactLine(to.phone, to.fax))}</div>`;
+
+    const address = `${esc([from.street, from.street2].filter(Boolean).join(', '))} &middot; ${esc(from.cityStateZip)}`;
+
+    return `<div class="sheet">
+  <header class="sheet-head gen-head sheet-rule">
+    <div class="head-left">
+      ${wordmark}
+      <div class="tagline">${esc(I.tagline)}</div>
+      <div class="head-addr">
+        ${address}<br>
+        Ph ${esc(from.phone)}${edit || invoice.fromFax
+          ? ` &middot; Fax ${slot(edit, invoice.fromFax, { bind: 'fromFax', placeholder: 'our fax', width: 104 })}` : ''}
+      </div>
+    </div>
+    <div class="head-right">
+      <div class="gen-title">Invoice</div>
+      <dl class="gen-meta">
+        <!-- Issued by the counter, never typed — same sequence as the drug slips. -->
+        <dt>No.</dt><dd class="code font-bold" data-out="number">${esc(number)}</dd>
+        <dt>Date</dt><dd>${dateSpot('date', invoice.date)}</dd>
+        ${edit || due ? `<dt>Due</dt><dd>${
+          dateSpot('dueDate', due, 'Optional — leave blank and the bill shows no due date')}</dd>` : ''}
+      </dl>
+    </div>
+  </header>
+
+  <!-- Bill to, and the one number they're looking for. -->
+  <section class="gen-parties">
+    <div class="party">
+      <div class="party-head">${heading('Bill to')}${clientSaveButton(to, edit, dir)}</div>
+      <div style="margin-top:4px">${clientNameSpot(to, edit, dir, 'Customer or business name')}</div>
+      <div class="party-lines">
+        ${slot(edit, to.street, { bind: 'to.street', placeholder: 'Street address', block: true })}
+        ${slot(edit, to.cityStateZip, { bind: 'to.cityStateZip', placeholder: 'City, state, ZIP', block: true })}
+        ${contact}
+      </div>
+    </div>
+    <div class="gen-due">
+      ${heading('Amount due')}
+      <div class="gen-due-amount code" data-out="total">${esc(I.money(t.total))}</div>
+      <div class="gen-due-when" data-out="due-when">${esc(dueWhen(due, number))}</div>
+    </div>
+  </section>
+
+  <section class="gen-items">
+    <table>
+      <colgroup>
+        <col style="width:52px"><col><col style="width:96px"><col style="width:104px">
+      </colgroup>
+      <thead>
+        <tr><th class="num">Qty</th><th>Description</th><th class="num">Unit price</th><th class="num">Amount</th></tr>
+      </thead>
+      <tbody data-rows>
+        ${rows.map((item, i) => (edit ? generalEditableRow(item, i, invoice) : generalStaticRow(item))).join('\n')}
+        ${padRows(padding, 4)}
+      </tbody>
+    </table>
+
+    ${edit ? `<button type="button" class="add-line" data-act="add-line">+ Add a line</button>` : ''}
+
+    <div class="totals-wrap">
+      <table class="totals gen-totals"><tbody>
+        <tr><td class="total-cell">Subtotal</td><td class="total-cell num code" data-out="subtotal">${esc(I.money(t.subtotal))}</td></tr>
+        ${edit || t.tax !== 0 ? `<tr><td class="total-cell">Tax</td><td class="total-cell num code">${
+          edit ? slot(true, invoice.tax, { bind: 'tax', placeholder: '0.00', code: true, align: 'right', width: 70 })
+               : esc(I.money(t.tax))}</td></tr>` : ''}
+        <tr><td class="total-label">Amount due</td><td class="total-value num code" data-out="total">${esc(I.money(t.total))}</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  ${edit || invoice.notes ? `<section class="notes">
+    ${heading('Notes')}
+    ${edit
+      ? `<textarea class="slot notes-input" rows="3" placeholder="Payment terms, a PO number, anything they should know" data-bind="notes">${esc(invoice.notes)}</textarea>`
+      : `<div class="notes-text">${esc(invoice.notes)}</div>`}
+  </section>` : ''}
+
+  <section class="gen-foot">
+    <div class="gen-thanks">Thank you for your business.</div>
+    <div class="gen-ask">
+      Questions about this invoice? Call us at ${esc(from.phone)}. Please include
+      invoice no. <span data-out="number">${esc(number)}</span> with your payment.
+    </div>
+    <div class="sheet-foot">
+      <span>${esc(from.name)} &middot; ${address}</span>
+      ${o.copyLabel ? `<span class="font-bold">${esc(o.copyLabel)}</span>` : ''}
+    </div>
+  </section>
+</div>`;
+  }
+
+  /** A printed line on a general invoice: no codes, just what and how much. */
+  function generalStaticRow(item) {
+    return `<tr>
+      <td class="num">${esc(item.qty)}</td>
+      <td>
+        <div class="font-semibold">${esc(item.description)}</div>
+        ${item.strength ? `<div class="small">${esc(item.strength)}</div>` : ''}
+      </td>
+      <td class="num code">${item.price ? esc(I.money(I.toNumber(item.price))) : ''}</td>
+      <td class="num code font-semibold">${item.price ? esc(I.money(I.lineTotal(item))) : ''}</td>
+    </tr>`;
+  }
+
+  /** The same line, editable. No lookup row — there is no NDC to look up. */
+  function generalEditableRow(item, index, invoice) {
+    const canRemove = invoice.items.length > 1;
+    const id = item.id;
+    return `<tr data-row="${esc(id)}">
+      <td class="num qty-cell">
+        ${canRemove ? `<button type="button" class="row-remove" data-act="remove-line" data-id="${esc(id)}"
+              title="Remove line ${index + 1}" aria-label="Remove line ${index + 1}">&times;</button>` : ''}
+        ${slot(true, item.qty, { bind: 'item.qty', id, placeholder: '1', align: 'right', block: true })}
+      </td>
+      <td>
+        ${slot(true, item.description, { bind: 'item.description', id, placeholder: 'What it’s for', bold: true, block: true })}
+        <!-- strength on a drug line; here it's just the second line of detail. -->
+        ${slot(true, item.strength, { bind: 'item.strength', id, placeholder: 'Details (optional)', small: true, block: true })}
+      </td>
+      <td>${slot(true, item.price, { bind: 'item.price', id, placeholder: '0.00', code: true, align: 'right', block: true })}</td>
+      <td class="num code font-semibold" data-out="amount">${item.price ? esc(I.money(I.lineTotal(item))) : ''}</td>
+    </tr>`;
+  }
+
+  // ===========================================================================
   // The print document
   // ===========================================================================
 
@@ -660,7 +878,7 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     const o = opts || {};
     const sheets = I.sheetsFor(invoice);
     const labels = invoice.twoCopies
-      ? ['Pharmacy Shop copy', 'Receiving pharmacy copy']
+      ? ['Pharmacy Shop copy', invoice.docType === 'general' ? 'Customer copy' : 'Receiving pharmacy copy']
       : [''];
 
     const pages = [];
@@ -685,5 +903,5 @@ body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /** How many pieces of paper `doc()` will produce. */
   const pageCount = (invoice) => I.sheetsFor(invoice).length * (invoice.twoCopies ? 2 : 1);
 
-  return { CSS, sheet, doc, splitNote, editableRow, staticRow, pageCount, esc };
+  return { CSS, sheet, doc, splitNote, editableRow, staticRow, dueWhen, pageCount, esc };
 })();

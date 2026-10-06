@@ -276,8 +276,10 @@
     const inv = state.invoice;
     const t = I.totals(inv);
 
-    const number = el.sheet.querySelector('[data-out="number"]');
-    if (number) number.textContent = state.committed ? inv.invoiceNumber : shownNumber();
+    // A general invoice prints its number in three places, not one.
+    const number = state.committed ? inv.invoiceNumber : shownNumber();
+    setText('[data-out="number"]', number);
+    setText('[data-out="due-when"]', H.dueWhen(inv.dueDate, number));
 
     for (const row of el.sheet.querySelectorAll('[data-row]')) {
       const item = inv.items.find((i) => i.id === row.dataset.row);
@@ -300,7 +302,7 @@
     /* A CII line prints its quantity in words too, which needs a column wide
        enough to hold "twenty-eight". Only the sheet with CIIs on it widens. */
     const firstCol = el.sheet.querySelector('col');
-    if (firstCol) {
+    if (firstCol && inv.docType !== 'general') {
       const spellQty = inv.items.some((i) => I.groupOf(i.schedule) === 'cii');
       firstCol.style.width = `${spellQty ? 92 : 34}px`;
     }
@@ -315,12 +317,15 @@
     el.docType.disabled = state.committed;
     el.twoCopies.checked = inv.twoCopies;
     el.ndcLookup.checked = inv.ndcLookup;
+    // A general invoice has no NDCs, so there is nothing to look up.
+    el.ndcLookup.closest('label').hidden = inv.docType === 'general';
     renderSummary();
   }
 
+  /* Every match, not the first: a general invoice shows its total both in
+     the amount-due box and at the foot of the table. */
   function setText(sel, text) {
-    const node = el.sheet.querySelector(sel);
-    if (node) node.textContent = text;
+    for (const node of el.sheet.querySelectorAll(sel)) node.textContent = text;
   }
 
   function renderSummary() {
@@ -354,9 +359,17 @@
       if (item) item[bind.slice(5)] = value;
       return { structural: false };
     }
+    /* The general invoice formats its fax numbers as it goes, as well as the
+       phone — the same as the manual's GeneralSheet. The drug slip leaves its
+       faxes as typed. */
+    const general = inv.docType === 'general';
+    if (bind === 'fromFax' && general) {
+      inv.fromFax = I.formatPhone(value);
+      return { structural: false, corrected: inv.fromFax };
+    }
     if (bind.startsWith('to.')) {
       const key = bind.slice(3);
-      inv.to[key] = key === 'phone' ? I.formatPhone(value) : value;
+      inv.to[key] = key === 'phone' || (key === 'fax' && general) ? I.formatPhone(value) : value;
       // Typing over a picked pharmacy's name means it's no longer that one.
       if (key === 'name') state.clientId = null;
       return { structural: false, corrected: inv.to[key] };
@@ -522,6 +535,7 @@
        again" produce paper that doesn't match the filed record. The line may
        also have been removed, or the lookup switched off. */
     if (state.committed || !state.invoice.ndcLookup) return;
+    if (state.invoice.docType === 'general') return;
     if (!state.invoice.items.includes(item)) return;
     const entry = lookups.get(item.id);
     if (entry) entry.done = true;
@@ -684,13 +698,20 @@
   // ===========================================================================
 
   el.docType.addEventListener('change', () => {
-    /* Transfer or purchase is a fact about what happened, and it is in the
-       filed record — so once the invoice is written it stops being settable.
-       (The manual's toolbar still allows this; flipping it after saving makes
-       "Print again" produce a document the record doesn't describe.) */
+    /* Transfer, purchase or general is a fact about what happened, and it is
+       in the filed record — so once the invoice is written it stops being
+       settable. (The manual's toolbar still allows this; flipping it after
+       saving makes "Print again" produce a document the record doesn't
+       describe.) */
     if (state.committed) { refresh(); return; }
-    state.invoice.docType = el.docType.value === 'purchase' ? 'purchase' : 'transfer';
-    renderSheet(); // both party headings change
+    const picked = el.docType.value;
+    state.invoice.docType = picked === 'purchase' || picked === 'general' ? picked : 'transfer';
+    if (picked === 'general') {
+      // No NDCs on a general invoice — nothing still in flight should land.
+      abortLookups();
+      lookupResults.clear();
+    }
+    renderSheet(); // the party headings change — or, for general, the whole layout
   });
   el.twoCopies.addEventListener('change', () => {
     state.invoice.twoCopies = el.twoCopies.checked;
@@ -885,6 +906,7 @@
     const head = `<button type="button" class="inv-rec-head" data-rec="${H.esc(r.id)}">
       <span class="inv-rec-num">${H.esc(String(r.number))}</span>
       ${r.voided ? '<span class="inv-void-tag">Void</span>' : ''}
+      ${inv.docType === 'general' ? '<span class="inv-gen-tag">General</span>' : ''}
       <span class="inv-rec-to">${H.esc(r.toName || '—')}</span>
       <span class="inv-rec-meta">${H.esc(r.date || '')}</span>
       ${r.sheetCount > 1 ? `<span class="inv-rec-meta">${r.sheetCount} sheets</span>` : ''}
@@ -907,8 +929,9 @@
       <div class="inv-rec-body">
         <table><tbody>${lines}</tbody></table>
         ${r.voidReason ? `<p class="inv-rec-note err">Voided — ${H.esc(r.voidReason)}</p>` : ''}
-        <p class="inv-rec-note">Released by ${H.esc(inv.pharmacist || '—')} · picked up by ${
-          H.esc(inv.pickedUpBy || '—')} · written by ${H.esc(r.createdByEmail || '—')}</p>
+        <p class="inv-rec-note">${inv.docType === 'general' ? '' : `Released by ${
+          H.esc(inv.pharmacist || '—')} · picked up by ${H.esc(inv.pickedUpBy || '—')} · `}Written by ${
+          H.esc(r.createdByEmail || '—')}</p>
         <div class="btns">
           <button type="button" class="secondary" data-rec-act="reprint" data-id="${H.esc(r.id)}">Reprint</button>
           <button type="button" class="secondary" data-rec-act="duplicate" data-id="${H.esc(r.id)}">Duplicate as new</button>

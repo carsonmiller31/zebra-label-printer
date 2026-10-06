@@ -54,6 +54,7 @@
 .inv-toolbar .btns { margin-top: 0; margin-left: auto; }
 .inv-checks { display: flex; flex-direction: column; gap: 5px; }
 .inv-check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.inv-check[hidden] { display: none; }
 .inv-check input { width: auto; margin: 0; accent-color: #2c6d4c; }
 .inv-total { text-align: right; flex: none; }
 .inv-total .k { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
@@ -108,6 +109,10 @@
 .inv-rec-total { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .inv-void-tag {
   border: 1px solid #b42318; color: #b42318; border-radius: 4px;
+  padding: 0 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+.inv-gen-tag {
+  border: 1px solid var(--border); color: var(--muted); border-radius: 4px;
   padding: 0 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
 }
 .inv-rec-body { border-top: 1px solid var(--border); padding: 12px 14px; }

@@ -90,10 +90,14 @@ var Invoicing = (function () {
       ndcLookup: true,
       /* Same paper, two vocabularies. "transfer" is the DEA drug-transfer slip
          this was built for; "purchase" relabels the two party blocks as
-         Purchaser/Vendor. Invoices saved before this field existed were all
-         transfers, so a missing value reads as one rather than needing a
-         migration. */
+         Purchaser/Vendor. "general" is a plain bill for anything that isn't
+         drugs — no DEA, NDC, lot or schedule anywhere on it, and it never
+         splits into several sheets. Invoices saved before this field existed
+         were all transfers, so a missing value reads as one rather than
+         needing a migration. */
       docType: 'transfer',
+      /** When a general invoice is due. Optional: older invoices don't have it. */
+      dueDate: '',
     };
   }
 
@@ -120,7 +124,8 @@ var Invoicing = (function () {
        Starting from a blank block also defaults any field the record is
        missing to "" rather than leaving it undefined, which `.trim()` throws on. */
     inv.to = Object.assign(blankInvoice().to, (raw && raw.to) || {});
-    inv.docType = inv.docType === 'purchase' ? 'purchase' : 'transfer';
+    inv.docType = inv.docType === 'purchase' || inv.docType === 'general' ? inv.docType : 'transfer';
+    inv.dueDate = typeof inv.dueDate === 'string' ? inv.dueDate : '';
     const items = Array.isArray(raw && raw.items) ? raw.items : [];
     inv.items = items.length
       ? items.map((i) => {
@@ -325,8 +330,14 @@ var Invoicing = (function () {
     const filled = invoice.items.filter(hasContent);
     const items = filled.length ? filled : invoice.items.slice(0, 1);
 
+    /* A general invoice has no schedules to split on, whatever a duplicated
+       drug line might still carry — it is always one sheet. */
+    const general = invoice.docType === 'general';
     const groups = GROUP_ORDER
-      .map((key) => ({ key, items: items.filter((item) => groupOf(item.schedule) === key) }))
+      .map((key) => ({
+        key,
+        items: items.filter((item) => (general ? 'plain' : groupOf(item.schedule)) === key),
+      }))
       .filter((g) => g.items.length > 0);
     if (!groups.length) return [];
 
