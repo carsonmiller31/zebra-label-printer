@@ -4,7 +4,7 @@ A desktop app for the printing and paperwork a pharmacy counter does:
 
 - **Zebra Labels** — bottle labels, staff name tags and custom label designs, on
   a Zebra GX420d (or compatible) over the network.
-- **Paper Forms** — a call-in script written down during a phone call and
+- **Phone Scripts** — a call-in script written down during a phone call and
   printed on the top half of an ordinary 8.5" × 11" sheet.
 - **Invoices** — a drug transfer (or purchase) invoice, saved to the pharmacy's
   record and printed. The same tool as the Instruction Manual's `/invoices`
@@ -25,7 +25,7 @@ else installed (no Node, no browser setup). Electron bundles its own runtime.
 The app opens a normal window, runs a private label server on `127.0.0.1` only
 (nothing is exposed to the network, so there is no Windows Firewall prompt), and
 sends ZPL to the Zebra over raw TCP port 9100 — exactly as before. Paper goes out
-through the computer's own printer instead (see **Call-in scripts** below).
+through the computer's own printer instead (see **Phone scripts** below).
 
 ## For the end user (non-technical)
 
@@ -40,7 +40,7 @@ through the computer's own printer instead (see **Call-in scripts** below).
 Then pick a tab: **Bottle Label** for a drug bottle, **Name Tag** for a staff
 tag, or **Label Designer** to lay out your own and click **Print This Label**.
 
-For a phoned-in prescription, switch to **Paper Forms** instead — see below.
+For a phoned-in prescription, switch to **Phone Scripts** instead — see below.
 For a drug transfer slip, switch to **Invoices** and sign in — see below.
 
 ## Bottle labels
@@ -121,13 +121,26 @@ Notes for changing it:
   name sets the scale; if the pair won't clear the tag's height the whole stack
   is tried a step smaller until it does.
 
-## Call-in scripts (Paper Forms)
+## Phone scripts
 
-Switch the top-right control to **Paper Forms** to take a prescription over the
+Switch the top-right control to **Phone Scripts** to take a prescription over the
 phone. Type what the office dictates into the left-hand column — patient and
 date of birth, the drug, quantity, refills, the sig, the prescriber and their
-NPI or DEA number, who called and the number to call back — and press
+NPI and DEA number, who called and the number to call back — and press
 **Print Form**.
+
+### Controlled substances
+
+- **Schedule II won't print.** A CII can't be taken over the phone; it has to
+  come as an e-script or a written prescription. The form says so and refuses.
+- **Schedule III–V need the prescriber's DEA number**, and it has to pass the
+  DEA check digit (1st + 3rd + 5th digits, plus twice the 2nd + 4th + 6th; the
+  last digit of that is the 7th). A misheard digit almost never passes.
+
+The schedule comes from the drug list, which takes it from the FDA's NDC
+directory (`scripts/build-drug-list.js`), or straight from the FDA after an NDC
+lookup. Typed lines are read for the drug in them: brands, abbreviations,
+combinations and one-letter typos all count. These are federal schedules only.
 
 The preview on the right is not a mock-up: it is the document that goes to the
 printer, scaled down. The slip is **8.5" × 5.5"**, the top half of a Letter
@@ -345,7 +358,7 @@ document as data URIs — the print window is a `data:` URL and could neither
 fetch them cross-origin nor be relied on to finish loading them before the job
 was handed over.
 
-The printer is the same one the Call-In Script tab uses: one setting, one
+The printer is the same one the Phone Script tab uses: one setting, one
 machine, changeable from either place.
 
 ### Third-party files
@@ -442,7 +455,7 @@ becomes a permanent record.
 | `public/bottle/`                      | Bottle Label tab: NDC/FDA lookup, GS1, layout, UI  |
 | `public/nametag/`                     | Name Tag tab: logo bitmap, layout, UI              |
 | `public/logo.svg`                     | The pharmacy mark — name tags, header and app icon |
-| `public/paper/`                       | Call-In Script tab: printed form, print bridge, UI |
+| `public/paper/`                       | Phone Script tab: printed form, print bridge, UI |
 | `public/invoices/`                    | Invoices tab: model, Firestore, the sheet, the UI  |
 | `public/invoices/model.js`            | Invoice shape, totals, quantity-in-words, the split |
 | `public/invoices/store.js`            | Firebase: sign-in, invoices, counter, pharmacies   |

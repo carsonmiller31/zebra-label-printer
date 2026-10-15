@@ -1,6 +1,8 @@
 'use strict';
 /*
- * The printed call-in form.
+ * The printed phone-script forms: a call-in from a prescriber's office, and a
+ * transfer in from another pharmacy. `d.kind` picks which ('transfer', or the
+ * call-in by default).
  *
  * This module owns everything about the piece of paper: it turns the fields on
  * the tab into one self-contained HTML document, styled for a US Letter sheet.
@@ -89,6 +91,11 @@ body {
 }
 .f.lead .v { font-size: 13pt; font-weight: 500; min-height: 20pt; }
 .f.tall .v { min-height: 34pt; }
+/* The transfer slip carries two more rows in the same half sheet. */
+.body.dense { gap: 6pt; padding-top: 9pt; }
+.body.dense .f .v { min-height: 16pt; padding-bottom: 2pt; }
+.body.dense .f.lead .v { min-height: 18pt; }
+.body.dense .f.tall .v { min-height: 26pt; }
 /* Numbers read as data, not prose: a touch of tracking, nothing more. */
 .f .v.mono { letter-spacing: 0.06em; }
 
@@ -124,6 +131,8 @@ body {
     };
   }
 
+  const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+
   /** One labelled line. An empty value leaves a ruled blank to write on. */
   function field(label, value, { cls = '', note = '', mono = false } = {}) {
     const k = esc(label) + (note ? ` <em>${esc(note)}</em>` : '');
@@ -131,16 +140,14 @@ body {
            `<div class="v${mono ? ' mono' : ''}">${esc(value) || '&nbsp;'}</div></div>`;
   }
 
-  /** The slip itself. `d` is the plain form data; `at` is the Date it was taken. */
-  function sheet(d, { at, cutLine = true } = {}) {
+  /** The top of a slip: its title, the pharmacy, and when it was taken. */
+  function head(title, what, d, at) {
     const t = stamp(at);
     const org = (d.org || '').trim();
-
-    return `<div class="sheet">
-  <div class="hd">
+    return `<div class="hd">
     <div>
-      <h1>Telephone Prescription</h1>
-      <div class="org">${org ? esc(org) + ' &middot; ' : ''}Call-in record</div>
+      <h1>${esc(title)}</h1>
+      <div class="org">${org ? esc(org) + ' &middot; ' : ''}${esc(what)}</div>
     </div>
     <div class="when">
       <div class="k">Received</div>
@@ -148,7 +155,35 @@ body {
       <div class="t">${esc(t.time)}</div>
     </div>
   </div>
-  <div class="rule"></div>
+  <div class="rule"></div>`;
+  }
+
+  /** The bottom of a slip: the initials box and what the slip is. */
+  function foot(who, cap, d, cutLine) {
+    return `<div class="ft">
+    <div class="ini">
+      <div class="k">${esc(who)}</div>
+      <div class="box">${esc((d.initials || '').toUpperCase()) || '&nbsp;'}</div>
+    </div>
+    <div class="cap">${esc(cap)}</div>
+  </div>
+  ${cutLine ? '<div class="cut"></div>' : ''}`;
+  }
+
+  /** The DAW code, with what it means, short enough for its box. */
+  const DAW = { 0: '0 · Sub OK', 1: '1 · No sub' };
+  const daw = (v) => DAW[v] || v;
+
+  const drugNote = (d) => (d.schedule ? `— Schedule ${ROMAN[d.schedule]}` : '');
+
+  /** The slip itself. `d` is the plain form data; `at` is the Date it was taken. */
+  function sheet(d, opts = {}) {
+    return d.kind === 'transfer' ? transferSheet(d, opts) : callInSheet(d, opts);
+  }
+
+  function callInSheet(d, { at, cutLine = true } = {}) {
+    return `<div class="sheet">
+  ${head('Telephone Prescription', 'Call-in record', d, at)}
 
   <div class="body">
     <div class="r">
@@ -157,9 +192,12 @@ body {
     </div>
 
     <div class="r">
-      <div style="flex:3;">${field('Drug, strength & form', d.drug, { cls: 'lead' })}</div>
+      <div style="flex:3;">${field('Drug, strength & form', d.drug, {
+        cls: 'lead', note: drugNote(d),
+      })}</div>
       <div style="flex:1;">${field('Quantity', d.qty)}</div>
       <div style="flex:1;">${field('Refills', d.refills)}</div>
+      <div style="flex:1;">${field('DAW', daw(d.daw))}</div>
     </div>
 
     <div class="r">
@@ -168,7 +206,8 @@ body {
 
     <div class="r">
       <div style="flex:2;">${field('Prescriber', d.prescriber)}</div>
-      <div style="flex:1;">${field('NPI / DEA', d.npi, { mono: true })}</div>
+      <div style="flex:1;">${field('NPI', d.npi, { mono: true })}</div>
+      <div style="flex:1;">${field('DEA', d.dea, { mono: true })}</div>
     </div>
 
     <div class="r">
@@ -177,14 +216,64 @@ body {
     </div>
   </div>
 
-  <div class="ft">
-    <div class="ini">
-      <div class="k">Taken by</div>
-      <div class="box">${esc((d.initials || '').toUpperCase()) || '&nbsp;'}</div>
+  ${foot('Taken by', 'Verbal prescription received by telephone', d, cutLine)}
+</div>`;
+  }
+
+  /*
+   * A prescription transferred in from another pharmacy. Besides the
+   * prescription, it records what the federal rule for a controlled transfer
+   * (21 CFR 1306.25) asks for — the other pharmacy's name, address and DEA
+   * number, its Rx number, the pharmacist who gave it, when it was written and
+   * first filled, the last fill and the refills left — so one slip does for
+   * every drug.
+   */
+  function transferSheet(d, { at, cutLine = true } = {}) {
+    return `<div class="sheet">
+  ${head('Prescription Transfer', 'Transfer-in record', d, at)}
+
+  <div class="body dense">
+    <div class="r">
+      <div style="flex:2;">${field('Patient', d.patient, { cls: 'lead' })}</div>
+      <div style="flex:1;">${field('Date of birth', d.dob, { mono: true })}</div>
     </div>
-    <div class="cap">Verbal prescription received by telephone</div>
+
+    <div class="r">
+      <div style="flex:3;">${field('Drug, strength & form', d.drug, { cls: 'lead', note: drugNote(d) })}</div>
+      <div style="flex:1;">${field('Quantity', d.qty)}</div>
+      <div style="flex:1;">${field('Refills left', d.refills)}</div>
+    </div>
+
+    <div class="r">
+      <div style="flex:1;">${field('Directions', d.sig, { cls: 'tall', note: '— sig' })}</div>
+    </div>
+
+    <div class="r">
+      <div style="flex:2;">${field('Prescriber', d.prescriber)}</div>
+      <div style="flex:1;">${field('NPI', d.npi, { mono: true })}</div>
+      <div style="flex:1;">${field('DEA', d.dea, { mono: true })}</div>
+    </div>
+
+    <div class="r">
+      <div style="flex:1;">${field('Their Rx #', d.rxNum, { mono: true })}</div>
+      <div style="flex:1;">${field('Written', d.written, { mono: true })}</div>
+      <div style="flex:1;">${field('First filled', d.firstFill, { mono: true })}</div>
+      <div style="flex:1;">${field('Last filled', d.lastFill, { mono: true })}</div>
+    </div>
+
+    <div class="r">
+      <div style="flex:2;">${field('Transferred from', d.pharmacy, { note: '— pharmacy' })}</div>
+      <div style="flex:1;">${field('Phone', d.pharmPhone, { mono: true })}</div>
+      <div style="flex:1;">${field('Pharmacy DEA', d.pharmDea, { mono: true })}</div>
+    </div>
+
+    <div class="r">
+      <div style="flex:2;">${field('Pharmacy address', d.pharmAddr)}</div>
+      <div style="flex:2;">${field('Transferring pharmacist', d.pharmacist)}</div>
+    </div>
   </div>
-  ${cutLine ? '<div class="cut"></div>' : ''}
+
+  ${foot('Received by', 'Prescription transferred in by telephone', d, cutLine)}
 </div>`;
   }
 
@@ -200,7 +289,8 @@ body {
     const pages = [];
     for (let i = 0; i < n; i++) pages.push(sheet(d, { at, cutLine }));
     const who = (d.patient || '').trim();
-    return wrap(who ? `Call-in — ${who}` : 'Call-in prescription', pages.join('\n'));
+    const what = d.kind === 'transfer' ? 'Transfer' : 'Call-in';
+    return wrap(who ? `${what} — ${who}` : `${what} prescription`, pages.join('\n'));
   }
 
   /** The same slip, for the on-screen preview iframe. */

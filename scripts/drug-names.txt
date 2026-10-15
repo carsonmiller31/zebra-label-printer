@@ -5,6 +5,7 @@ Acamprosate
 Acarbose
 Acebutolol
 Acetaminophen
+Acetaminophen/Codeine
 Acetazolamide
 Acetylcysteine
 Acitretin

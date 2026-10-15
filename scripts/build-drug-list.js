@@ -16,6 +16,11 @@
  *
  * Responses are cached under scripts/.rxnorm-cache/ so a re-run is fast and
  * offline. Delete that folder to refresh against RxNorm.
+ *
+ * The DEA schedule comes from somewhere else: RxNorm doesn't carry it, but the
+ * FDA's National Drug Code Directory does, on every listed product. The whole
+ * directory is downloaded once into scripts/.openfda-cache/ (delete it to
+ * refresh) and each entry takes the schedule its products are listed under.
  */
 
 const fs = require('fs');
@@ -62,6 +67,8 @@ const NAMES = path.join(__dirname, 'drug-names.txt');
 const ALIASES = path.join(__dirname, 'brand-aliases.txt');
 const OUT = path.join(ROOT, 'public', 'paper', 'drugs.js');
 const CACHE = path.join(__dirname, '.rxnorm-cache');
+const FDA_CACHE = path.join(__dirname, '.openfda-cache');
+const FDA_ZIP = 'https://download.open.fda.gov/drug/ndc/drug-ndc-0001-of-0001.json.zip';
 
 // The Current Prescribable Content subset: human drugs currently marketed in
 // the US. Plain /REST/drugs.json also carries veterinary and withdrawn
@@ -182,6 +189,71 @@ function rankForm(f) {
   return base * 2 + (f.includes(',') ? 1 : 0);
 }
 
+// ---- DEA schedules, from the FDA's NDC directory -------------------------
+
+/** Every human drug product the FDA lists: its ingredients, form and schedule. */
+async function fdaProducts() {
+  fs.mkdirSync(FDA_CACHE, { recursive: true });
+  const json = path.join(FDA_CACHE, 'drug-ndc-0001-of-0001.json');
+  if (!fs.existsSync(json)) {
+    process.stdout.write('Downloading the FDA NDC directory…\n');
+    const res = await fetch(FDA_ZIP);
+    if (!res.ok) throw new Error(`FDA NDC directory: HTTP ${res.status}`);
+    const zip = path.join(FDA_CACHE, 'ndc.json.zip');
+    fs.writeFileSync(zip, Buffer.from(await res.arrayBuffer()));
+    // bsdtar reads zips, and ships with both macOS and Windows 10+.
+    require('child_process').execFileSync('tar', ['-xf', zip, '-C', FDA_CACHE]);
+    fs.unlinkSync(zip);
+  }
+  return JSON.parse(fs.readFileSync(json, 'utf8')).results
+    .filter((r) => /^HUMAN/.test(r.product_type || '') && r.active_ingredients)
+    .map((r) => ({
+      ingredients: r.active_ingredients.map((a) => a.name.toLowerCase()),
+      form: firstWord(r.dosage_form),
+      schedule: SCHEDULE[r.dea_schedule] || 0,
+    }));
+}
+
+const SCHEDULE = { CI: 1, CII: 2, CIII: 3, CIV: 4, CV: 5 };
+const firstWord = (s) => String(s || '').toLowerCase().split(/[ ,]/)[0];
+
+/*
+ * One of our ingredients names one of the FDA's when every word of ours is in
+ * it: "Morphine Sulfate" is "MORPHINE SULFATE", "Testosterone Cypionate" is
+ * not plain "TESTOSTERONE". Mixed amphetamine salts are four FDA ingredients,
+ * each with "amphetamine" in it — hence a substring, and "salts" dropped.
+ */
+const ingredientWords = (s) => s.toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/)
+  .filter((w) => w && w !== 'salts');
+const isNamed = (ours, fda) => ingredientWords(ours).every((w) => fda.includes(w));
+
+/*
+ * The schedule for one entry: from the FDA products with exactly its
+ * ingredients — every one of ours present, nothing else besides — in its dose
+ * form when any are listed in it (dronabinol capsules are CIII, the solution
+ * CII), otherwise in any form. 0 means not controlled.
+ *
+ * Where listings disagree, the most common answer wins, and a tie goes to the
+ * stricter. Not the strictest outright: a labeler or two lists Tylenol #3 as
+ * CII, and one bad listing shouldn't stop every call-in of it. Disagreements
+ * are printed at the end of the build so they get a look.
+ */
+function scheduleFor(entry, products) {
+  const ours = entry.g.split('/');
+  const same = products.filter((p) =>
+    p.ingredients.every((fi) => ours.some((o) => isNamed(o, fi)))
+    && ours.every((o) => p.ingredients.some((fi) => isNamed(o, fi))));
+  const inForm = same.filter((p) => p.form === firstWord(entry.f));
+  const votes = new Map();
+  for (const p of inForm.length ? inForm : same) votes.set(p.schedule, (votes.get(p.schedule) || 0) + 1);
+  const ranked = [...votes].sort((a, b) => b[1] - a[1] || strictness(a[0]) - strictness(b[0]));
+  return { schedule: ranked.length ? ranked[0][0] : 0, votes };
+}
+
+/** CII is the strictest; not controlled at all is the least. */
+const strictness = (c) => c || 9;
+const label = (c) => (c ? `C${['', 'I', 'II', 'III', 'IV', 'V'][c]}` : 'none');
+
 async function pool(items, worker) {
   const out = new Array(items.length);
   let next = 0;
@@ -199,7 +271,8 @@ const js = (v) => JSON.stringify(v);
 
 function render(entries) {
   const lines = entries.map((e) => {
-    const extra = (e.x ? `, x: ${js(e.x)}` : '') + (e.a ? `, a: ${js(e.a)}` : '');
+    const extra = (e.c ? `, c: ${e.c}` : '') +
+      (e.x ? `, x: ${js(e.x)}` : '') + (e.a ? `, a: ${js(e.a)}` : '');
     return `    { g: ${js(e.g)}, b: ${js(e.b)}, f: ${js(e.f)}, p: ${e.p}, s: ${js(e.s)}${extra} },`;
   });
   return `'use strict';
@@ -215,7 +288,8 @@ function render(entries) {
  *   Every fact about them — the strengths that exist, the dose forms, the
  *   brand each is sold under — comes from RxNorm's Current Prescribable
  *   Content, the US National Library of Medicine's list of what can be
- *   dispensed today. None of it is written from memory.
+ *   dispensed today. The DEA schedule comes from the FDA's National Drug Code
+ *   Directory. None of it is written from memory.
  *
  * To add a drug, put its name in scripts/drug-names.txt and re-run:
  *
@@ -229,6 +303,7 @@ function render(entries) {
  *   a — abbreviations it gets typed under; searchable, never shown
  *   p — how many products RxNorm lists; a rough stand-in for how often the
  *       drug is dispensed, used only to break ties between equal matches
+ *   c — the federal DEA schedule, 2–5 (CII–CV); absent when not controlled
  */
 var CommonDrugs = (function () {
   const LIST = [
@@ -247,6 +322,7 @@ if (typeof module !== 'undefined') module.exports = CommonDrugs;
   process.stdout.write(`Looking up ${names.length} drugs in RxNorm…\n`);
 
   const bodies = await pool(names, fetchDrug);
+  const products = await fdaProducts();
 
   const entries = [];
   const missing = [];
@@ -293,11 +369,27 @@ if (typeof module !== 'undefined') module.exports = CommonDrugs;
     }
   }
 
+  let controlled = 0;
+  const disputed = [];
+  for (const e of entries) {
+    const { schedule, votes } = scheduleFor(e, products);
+    if (schedule) { e.c = schedule; controlled++; }
+    if (votes.size > 1) {
+      const tally = [...votes].map(([c, n]) => `${label(c)} ×${n}`).join(', ');
+      disputed.push(`${e.g} ${e.f}: ${label(schedule)} (${tally})`);
+    }
+  }
+
   entries.sort((a, b) => a.g.localeCompare(b.g) || rankForm(a.f) - rankForm(b.f));
   fs.writeFileSync(OUT, render(entries));
 
   process.stdout.write(`Wrote ${entries.length} entries for ${names.length - missing.length} drugs.\n`);
   process.stdout.write(`Retired brand names added to ${aliased} entries.\n`);
+  process.stdout.write(`DEA schedule on ${controlled} entries.\n`);
+  if (disputed.length) {
+    process.stdout.write(`\nFDA listings disagree on the schedule (${disputed.length}) — check these:\n`);
+    for (const d of disputed) process.stdout.write(`  ${d}\n`);
+  }
   if (unmatched.length) {
     process.stdout.write(`\nAliases with no matching drug (${unmatched.length}):\n`);
     for (const u of unmatched) process.stdout.write(`  ${u}\n`);

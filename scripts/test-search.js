@@ -75,6 +75,29 @@ for (const f of failures) {
 }
 process.stdout.write(`\n${pass}/${CASES.length} passed\n`);
 
+// --- DEA schedule of the drug line ------------------------------------------
+// A CII stops the form; a CIII–CV needs a DEA number. Getting it wrong either
+// way matters, so non-controlled lines that sit close to controlled ones are
+// here too. 0 = not controlled.
+const SCHEDULES = [
+  ['Oxycodone 5 mg tablet', 2],   ['oxycodne 5mg', 2],           ['Norco 10/325', 2],
+  ['percocet 5/325', 2],          ['Adderall 20', 2],            ['codeine 30 mg', 2],
+  ['APAP w/ codeine 300/30', 3],  ['Tylenol with Codeine 300 mg-30 mg tablet', 3],
+  ['Suboxone 8-2', 3],            ['dronabinol 5 mg capsule', 3], ['dronabinol 5 mg', 2],
+  ['tramadol 50', 4],             ['Xanax 1mg', 4],              ['alprazolm 0.5', 4],
+  ['Ambien 10', 4],               ['promethazine with codeine syrup', 5],
+  ['Lyrica 75', 5],               ['Lomotil', 5],
+  ['promethazine 25 mg', 0],      ['gabapentin 300', 0],         ['hydrochlorothiazide 25', 0],
+  ['hydroxyzine 25', 0],          ['Acetaminophen 325', 0],      ['Atorvastatin 40 mg tablet', 0],
+];
+const schedFail = [];
+for (const [line, want] of SCHEDULES) {
+  const got = (DrugSearch.schedule(line) || {}).schedule || 0;
+  if (got !== want) schedFail.push(`  FAIL  ${line.padEnd(42)} want ${want} got ${got}`);
+}
+for (const f of schedFail) process.stdout.write(`${f}\n`);
+process.stdout.write(`${SCHEDULES.length - schedFail.length}/${SCHEDULES.length} schedules right\n`);
+
 // A call-in is typed fast; the list has to keep up with the keystrokes.
 const t0 = Date.now();
 for (let i = 0; i < 300; i++) DrugSearch.suggest('sertaline');
@@ -84,4 +107,4 @@ for (let i = 0; i < 300; i++) DrugSearch.suggest('ator');
 const perBest = (Date.now() - t1) / 300;
 process.stdout.write(`typo search ${perWorst.toFixed(2)} ms, clean prefix ${perBest.toFixed(2)} ms\n`);
 
-process.exit(failures.length ? 1 : 0);
+process.exit(failures.length || schedFail.length ? 1 : 0);

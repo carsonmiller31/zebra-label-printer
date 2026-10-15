@@ -305,6 +305,13 @@ fieldset.drug legend, fieldset.tagsize legend { font-size: 13px; font-weight: 60
 .notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .notes li { padding-left: 16px; position: relative; }
 .notes li::before { content: "•"; position: absolute; left: 4px; }
+/* Stops printing outright: a CII, or a controlled drug without a good DEA number. */
+.notes li.tone-stop {
+  color: var(--err); font-weight: 600;
+  padding: 7px 10px 7px 26px; border-radius: 8px;
+  background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.35);
+}
+.notes li.tone-stop::before { left: 11px; }
 
 .print-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .print-row .copies { width: 80px; }
@@ -362,7 +369,7 @@ details.price-code #pCodeWord { text-transform: uppercase; letter-spacing: .1em;
 .confirm-list { margin: 8px 0 0; padding-left: 20px; font-size: 14px; color: var(--text); }
 .confirm-list li { margin: 2px 0; }
 
-/* ---- Mode switch: Zebra labels vs paper forms ---- */
+/* ---- Mode switch: Zebra labels vs phone scripts ---- */
 .head-bar {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 24px; flex-wrap: wrap; margin-bottom: 28px;
@@ -408,7 +415,7 @@ input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 
 
 .callin-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .callin-side .status { margin-top: 0; }
-.print-row #cPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
+.print-row #cPrint, .print-row #tPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
 
 /* The preview is the printed document itself, scaled down to fit. */
 .paper-stage {

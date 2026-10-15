@@ -8,3 +8,6 @@ firebase-debug.log
 
 # Cached RxNorm responses; regenerate with scripts/build-drug-list.js
 scripts/.rxnorm-cache/
+
+# The FDA NDC directory (DEA schedules); regenerate with scripts/build-drug-list.js
+scripts/.openfda-cache/

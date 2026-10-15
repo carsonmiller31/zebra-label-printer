@@ -317,7 +317,142 @@ var DrugSearch = (function () {
     return hits;
   }
 
-  return { suggest, scoreWord, editsToPrefix, norm };
+  // ---- Controlled substances ----------------------------------------------
+  /*
+   * What schedule is the drug on the form? The line is free text: picked from
+   * the list, filled from an NDC, or typed straight in — "Norco 10/325",
+   * "APAP w/ codeine 300/30", "oxycodne 5mg". So this reads the line for the
+   * drug names in it rather than searching it.
+   *
+   * Each word typed is matched to an ingredient (or a one-word brand or
+   * abbreviation of one), allowing a slip of the finger when the word is long
+   * enough and lands nearer one ingredient than any other. A drug is named when
+   * every one of its ingredients is, or when its brand is; the drug naming the
+   * most ingredients wins, so "promethazine with codeine" is the CV syrup, not
+   * plain promethazine, and "acetaminophen codeine" is Tylenol #3, not CII
+   * codeine.
+   *
+   * When the drug comes in forms on different schedules (dronabinol capsules
+   * are CIII, the solution CII) and the line doesn't say which, the strictest
+   * is assumed.
+   *
+   * → { schedule: 2–5, drug: 'Tramadol' } or null when nothing controlled is named.
+   */
+
+  let VOCAB = null;   // every ingredient word, plus words that stand for one
+  let SYN = null;     // abbreviation or one-word brand → ingredient word
+  let BY_DRUG = null; // generic → { ingredients, brands, entries }
+
+  const firstWord = (s) => norm(s).split(' ')[0];
+
+  function buildControlled() {
+    VOCAB = new Set();
+    SYN = new Map();
+    BY_DRUG = new Map();
+    for (const d of CommonDrugs.LIST || []) {
+      let drug = BY_DRUG.get(d.g);
+      if (!drug) {
+        drug = { g: d.g, ingredients: d.g.split('/').map(firstWord), brands: new Set(), entries: [] };
+        BY_DRUG.set(d.g, drug);
+        for (const w of drug.ingredients) VOCAB.add(w);
+      }
+      drug.entries.push(d);
+      for (const b of [d.b, ...(d.x || []), ...(d.a || [])]) {
+        const n = norm(b);
+        if (!n) continue;
+        drug.brands.add(n);
+        // "Xanax", "APAP": one word that means one ingredient.
+        if (drug.ingredients.length === 1 && !n.includes(' ')) SYN.set(n, drug.ingredients[0]);
+      }
+    }
+    for (const w of SYN.keys()) VOCAB.add(w);
+  }
+
+  /** Edits turning `a` into all of `b` — not a prefix of it, as above. */
+  function editsToWord(a, b) {
+    const rows = [];
+    for (let i = 0; i <= a.length; i++) {
+      rows.push([i]);
+      for (let j = 1; j <= b.length; j++) {
+        if (i === 0) { rows[0][j] = j; continue; }
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        let v = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1, rows[i - 1][j - 1] + cost);
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, rows[i - 2][j - 2] + 1);
+        rows[i][j] = v;
+      }
+    }
+    return rows[a.length][b.length];
+  }
+
+  const meant = new Map();
+
+  /** The ingredient a typed word means, or '' when it isn't one. */
+  function ingredientOf(word) {
+    if (!meant.has(word)) meant.set(word, guessIngredient(word));
+    return meant.get(word);
+  }
+
+  function guessIngredient(word) {
+    if (VOCAB.has(word)) return SYN.get(word) || word;
+    // Short words get no latitude, and long ones only one edit fewer than
+    // the search box allows: here a wrong guess stops a prescription.
+    const max = tolerance(word.length) - 1;
+    if (max < 1) return '';
+    let best = '';
+    let bestD = max + 1;
+    let tied = false;
+    for (const v of VOCAB) {
+      if (Math.abs(v.length - word.length) > max) continue;
+      const d = editsToWord(word, v);
+      if (d > max) continue;
+      if (d < bestD) { best = v; bestD = d; tied = false; }
+      else if (d === bestD && v !== best) tied = true;
+    }
+    return tied ? '' : (SYN.get(best) || best);
+  }
+
+  /** Words for a dose form, as said on the phone → as the list spells it. */
+  const FORM_WORDS = {
+    tablet: 'tablet', tablets: 'tablet', tab: 'tablet', tabs: 'tablet',
+    capsule: 'capsule', capsules: 'capsule', cap: 'capsule', caps: 'capsule',
+    solution: 'solution', syrup: 'solution', elixir: 'solution', liquid: 'solution',
+    suspension: 'suspension', film: 'film', patch: 'system', system: 'system',
+    injection: 'injection', gel: 'gel', lozenge: 'lozenge',
+  };
+
+  function schedule(text) {
+    if (!CommonDrugs.LIST) return null;
+    if (!VOCAB) buildControlled();
+    const line = norm(text);
+    if (!line) return null;
+    const padded = ` ${line} `;
+    const typed = line.split(' ').filter((w) => /^[a-z]/.test(w));
+    const words = new Set(typed.map(ingredientOf).filter(Boolean));
+    const said = typed.map((w) => FORM_WORDS[w]).filter(Boolean);
+
+    let best = [];
+    let bestCount = 0;
+    for (const drug of BY_DRUG.values()) {
+      const named = drug.ingredients.every((w) => words.has(w))
+        || [...drug.brands].some((b) => padded.includes(` ${b} `));
+      if (!named) continue;
+      const count = drug.ingredients.length;
+      if (count > bestCount) { best = [drug]; bestCount = count; }
+      else if (count === bestCount) best.push(drug);
+    }
+
+    let hit = null;
+    for (const drug of best) {
+      // The form named on the line, if any, picks between the drug's forms.
+      const inForm = drug.entries.filter((e) => said.includes(firstWord(e.f)));
+      for (const e of inForm.length ? inForm : drug.entries) {
+        if (e.c && (!hit || e.c < hit.schedule)) hit = { schedule: e.c, drug: drug.g };
+      }
+    }
+    return hit;
+  }
+
+  return { suggest, schedule, scoreWord, editsToPrefix, norm };
 })();
 
 if (typeof module !== 'undefined') module.exports = DrugSearch;

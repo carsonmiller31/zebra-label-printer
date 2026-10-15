@@ -462,7 +462,7 @@
 
   // A scan anywhere on the tab — whichever box the cursor was in, or none.
   // `closest('[hidden]')` rather than `ui.panel.hidden`: the panel is also out
-  // of sight when the whole Zebra view is hidden behind the Paper Forms mode,
+  // of sight when the whole Zebra view is hidden behind the Phone Scripts mode,
   // and the wedge must not be swallowing keystrokes from the call-in form.
   Wedge.capture({
     active: () => !ui.panel.closest('[hidden]') && !document.querySelector('.modal-overlay:not([hidden])'),

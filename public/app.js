@@ -28,6 +28,7 @@ function snapVal(v) {
 // every text box looks fine but ignores the keyboard until the window loses
 // and regains focus. This does the same job inside the page.
 // Resolves true for OK, false for Cancel / Escape / clicking the backdrop.
+// Pass cancel: null for a notice with only the OK button.
 function askConfirm(message, { ok = 'OK', cancel = 'Cancel', detail = [] } = {}) {
   return new Promise((resolve) => {
     const returnFocus = document.activeElement;
@@ -61,7 +62,8 @@ function askConfirm(message, { ok = 'OK', cancel = 'Cancel', detail = [] } = {})
     cancelBtn.type = 'button';
     cancelBtn.className = 'secondary';
     cancelBtn.textContent = cancel;
-    btns.append(okBtn, cancelBtn);
+    // cancel: null makes it a notice — one button, nothing to decide.
+    btns.append(...(cancel === null ? [okBtn] : [okBtn, cancelBtn]));
     box.append(btns);
     overlay.append(box);
 
@@ -76,7 +78,7 @@ function askConfirm(message, { ok = 'OK', cancel = 'Cancel', detail = [] } = {})
       else if (e.key === 'Tab') {
         // Keep focus on the two buttons while the dialog is open.
         e.preventDefault();
-        (document.activeElement === okBtn ? cancelBtn : okBtn).focus();
+        (document.activeElement === okBtn && cancel !== null ? cancelBtn : okBtn).focus();
       }
     };
     okBtn.addEventListener('click', () => close(true));
