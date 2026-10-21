@@ -124,10 +124,19 @@ Notes for changing it:
 ## Phone scripts
 
 Switch the top-right control to **Phone Scripts** to take a prescription over the
-phone. Type what the office dictates into the left-hand column — patient and
+phone. The form is two columns of fields over a print bar, sized so the whole
+call and the Print button fit in the window. Type what the office dictates — patient and
 date of birth, the drug, quantity, refills, the sig, the prescriber and their
 NPI and DEA number, who called and the number to call back — and press
 **Print Form**.
+
+One call can carry several drugs for the same patient. **Add another
+medication** (or Ctrl+Enter anywhere on the form) opens a new card and folds
+the others to a one-line summary; click a summary to edit it, × to remove it.
+Each medication prints as its own slip, with the patient, prescriber and caller
+repeated and "Rx 2 of 3" in the header, because each becomes its own
+prescription with its own Rx number. Slips go two to a Letter sheet. The
+Transfer tab stays one prescription per slip.
 
 ### Controlled substances
 
@@ -142,11 +151,11 @@ directory (`scripts/build-drug-list.js`), or straight from the FDA after an NDC
 lookup. Typed lines are read for the drug in them: brands, abbreviations,
 combinations and one-letter typos all count. These are federal schedules only.
 
-The preview on the right is not a mock-up: it is the document that goes to the
-printer, scaled down. The slip is **8.5" × 5.5"**, the top half of a Letter
-sheet, with the time the call was taken printed at the top right and the initials
-of whoever took it in a box at the bottom. The bottom half of the page comes out
-blank; a dashed line across the fold marks where to cut (that line can be turned
+The preview in the print bar (click it to see it full size) is not a mock-up: it is the document that goes to the
+printer, scaled down (with more than one medication, the arrows under it page
+through the slips). A slip is **8.5" × 5.5"**, half a Letter sheet, with the time the call was taken printed at the top right and the initials
+of whoever took it in a box at the bottom. A one-drug call leaves the bottom
+half of the page blank; a dashed line across the fold marks where to cut (that line can be turned
 off in Settings).
 
 Any field left empty prints as a ruled blank line, so printing the form with

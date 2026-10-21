@@ -9,10 +9,13 @@
  * The same document is what the preview shows and what goes to the printer, so
  * the preview is not an approximation of the printout — it is the printout.
  *
- * The form is 8.5" x 5.5": the top half of the sheet. The bottom half is left
- * blank (a dashed line marks the fold so the slip can be torn off). Copies are
- * repeated as extra pages rather than asking the printer for copies, so the
- * browser fall-back and the Electron path behave identically.
+ * A slip is 8.5" x 5.5": half a Letter sheet. A call-in prints one slip per
+ * medication, because each one becomes its own prescription with its own Rx
+ * number (and a controlled one is filed apart from the rest). Slips go two to
+ * a sheet, top half first, with a dashed line across the fold so they can be
+ * cut apart; a call with one drug leaves the bottom half blank. Copies repeat
+ * the whole set rather than asking the printer for copies, so the browser
+ * fall-back and the Electron path behave identically.
  *
  * Nothing here is stored anywhere. See paper/ui.js — patient details are never
  * written to localStorage.
@@ -43,15 +46,18 @@ body {
 }
 @page { size: 8.5in 11in; margin: 0; }
 
-/* One slip = the top half of a sheet. Copies break onto further pages. */
+/* A Letter page holds two slips, top half first. */
+.page {
+  width: 8.5in; height: 11in; overflow: hidden;
+  page-break-after: always; break-after: page;
+}
+.page:last-child { page-break-after: auto; break-after: auto; }
 .sheet {
   position: relative; overflow: hidden;
   width: 8.5in; height: 5.5in;
   padding: 0.4in 0.5in 0.18in;
   display: flex; flex-direction: column;
-  page-break-after: always; break-after: page;
 }
-.sheet:last-child { page-break-after: auto; break-after: auto; }
 
 .hd { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.3in; }
 .hd h1 {
@@ -68,6 +74,13 @@ body {
   text-transform: uppercase; color: #5a5a5a;
 }
 .hd .when .t { font-size: 10.5pt; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+/* "Rx 2 of 3": which of the call's prescriptions this slip is. */
+.hd .of {
+  display: inline-block; margin-left: 8pt; padding: 1.5pt 5pt 1pt;
+  border: 0.75pt solid #000; border-radius: 2pt;
+  font-size: 7pt; font-weight: 600; letter-spacing: 0.14em; color: #000;
+  vertical-align: 1pt;
+}
 
 .rule { border-top: 1.75pt solid #000; margin-top: 6pt; }
 
@@ -141,13 +154,14 @@ body {
   }
 
   /** The top of a slip: its title, the pharmacy, and when it was taken. */
-  function head(title, what, d, at) {
+  function head(title, what, d, at, n = 1, of = 1) {
     const t = stamp(at);
     const org = (d.org || '').trim();
+    const count = of > 1 ? `<span class="of">RX ${n} OF ${of}</span>` : '';
     return `<div class="hd">
     <div>
       <h1>${esc(title)}</h1>
-      <div class="org">${org ? esc(org) + ' &middot; ' : ''}${esc(what)}</div>
+      <div class="org">${org ? esc(org) + ' &middot; ' : ''}${esc(what)}${count}</div>
     </div>
     <div class="when">
       <div class="k">Received</div>
@@ -176,14 +190,31 @@ body {
 
   const drugNote = (d) => (d.schedule ? `— Schedule ${ROMAN[d.schedule]}` : '');
 
-  /** The slip itself. `d` is the plain form data; `at` is the Date it was taken. */
-  function sheet(d, opts = {}) {
-    return d.kind === 'transfer' ? transferSheet(d, opts) : callInSheet(d, opts);
+  /*
+   * The prescriptions on a form, each as the flat data one slip prints. A
+   * call-in carries its drugs in `d.meds`, and the patient, prescriber and
+   * caller are repeated on every slip. A transfer is always one.
+   */
+  function slips(d) {
+    if (d.kind === 'transfer' || !Array.isArray(d.meds)) return [d];
+    const meds = d.meds.length ? d.meds : [{}];
+    return meds.map((m) => ({ ...d, ...m }));
   }
 
-  function callInSheet(d, { at, cutLine = true } = {}) {
+  /**
+   * One slip. `d` is the plain form data; `at` is the Date it was taken. For a
+   * call-in, `index` picks which of its medications.
+   */
+  function sheet(d, { index = 0, ...opts } = {}) {
+    if (d.kind === 'transfer') return transferSheet(d, opts);
+    const all = slips(d);
+    const i = Math.max(0, Math.min(all.length - 1, index));
+    return callInSheet(all[i], { ...opts, n: i + 1, of: all.length });
+  }
+
+  function callInSheet(d, { at, cutLine = true, n = 1, of = 1 } = {}) {
     return `<div class="sheet">
-  ${head('Telephone Prescription', 'Call-in record', d, at)}
+  ${head('Telephone Prescription', 'Call-in record', d, at, n, of)}
 
   <div class="body">
     <div class="r">
@@ -283,11 +314,21 @@ body {
            `<body>${inner}</body></html>`;
   }
 
-  /** The full document to send to the printer: one page per copy. */
+  /**
+   * The full document to send to the printer: every slip, two to a page, once
+   * per copy. The cut line goes under a top-half slip only; the bottom one
+   * ends at the edge of the paper.
+   */
   function doc(d, { at = new Date(), copies = 1, cutLine = true } = {}) {
     const n = Math.max(1, Math.min(20, Math.floor(copies) || 1));
+    const set = slips(d);
+    const all = [];
+    for (let c = 0; c < n; c++) set.forEach((_, i) => all.push(i));
     const pages = [];
-    for (let i = 0; i < n; i++) pages.push(sheet(d, { at, cutLine }));
+    for (let p = 0; p < all.length; p += 2) {
+      const pair = all.slice(p, p + 2).map((i, k) => sheet(d, { at, index: i, cutLine: cutLine && k === 0 }));
+      pages.push(`<div class="page">${pair.join('\n')}</div>`);
+    }
     const who = (d.patient || '').trim();
     const what = d.kind === 'transfer' ? 'Transfer' : 'Call-in';
     return wrap(who ? `${what} — ${who}` : `${what} prescription`, pages.join('\n'));
@@ -298,5 +339,8 @@ body {
     return wrap('Preview', sheet(d, opts));
   }
 
-  return { doc, previewDoc, sheet, stamp };
+  /** How many slips (half sheets) the form prints, per copy. */
+  const count = (d) => slips(d).length;
+
+  return { doc, previewDoc, sheet, stamp, count };
 })();

@@ -5,7 +5,9 @@
  *
  * Phone Script: someone from a prescriber's office is on the phone. You type
  * what they say, press Print, and a half-sheet comes out of the ordinary
- * office printer with the time it was taken and your initials on it.
+ * office printer with the time it was taken and your initials on it. One call
+ * can carry several drugs for the same patient: each is a card on the form
+ * and its own slip on paper.
  *
  * Transfer: another pharmacy is reading you a prescription to transfer in.
  * Same form, same drug search and printing, plus the transferring pharmacy,
@@ -164,20 +166,23 @@
    * Everything that differs between a call-in and a transfer. Field keys map
    * to element ids by prefix: 'refills' on the Transfer tab is #tRefills.
    *
-   *   fields   — the boxes holding the call (cleared on New, never saved)
-   *   dates    — reformatted as a date as they're typed
-   *   phones   — tidied to (555) 123-4567 on leaving
-   *   deas     — DEA numbers checked against a controlled drug, with their names
-   *   required — what a finished slip should never be missing
-   *   more     — the warnings only this kind has
+   *   multi      — the form takes several drugs, each on its own card and slip
+   *   fields     — the boxes holding the call (cleared on New, never saved)
+   *   dates      — reformatted as a date as they're typed
+   *   phones     — tidied to (555) 123-4567 on leaving
+   *   deas       — DEA numbers checked against a controlled drug, with their names
+   *   required   — what a finished slip should never be missing
+   *   rxRequired — the same, for each drug on a multi form
+   *   more       — the warnings only this kind has
    */
   const CALLIN = {
-    tab: 'callin', prefix: 'c', what: 'call',
-    fields: ['patient', 'dob', 'drug', 'qty', 'refills', 'daw', 'sig', 'prescriber', 'npi', 'dea', 'caller', 'phone'],
+    tab: 'callin', prefix: 'c', what: 'call', multi: true,
+    fields: ['patient', 'dob', 'prescriber', 'npi', 'dea', 'caller', 'phone'],
     dates: ['dob'], phones: ['phone'],
     deas: [['dea', 'the prescriber’s DEA number']],
     readBack: 'Read it back to the office.',
-    required: ['patient', 'drug', 'qty', 'prescriber', 'caller', 'phone', 'initials'],
+    required: ['patient', 'prescriber', 'caller', 'phone', 'initials'],
+    rxRequired: ['drug', 'qty'],
     requiredName: {
       patient: 'The patient’s name', drug: 'The drug', qty: 'The quantity',
       prescriber: 'The prescriber', caller: 'Who called it in',
@@ -187,11 +192,13 @@
     cii: (drug) => `${drug} is Schedule II. A CII can’t be taken over the phone — ` +
       'it has to come as an e-script or a written prescription. Ask the office to send it electronically.',
     stopTitle: (cii) => (cii ? 'A Schedule II can’t be called in' : 'This needs a valid DEA number'),
-    more(d, hit, out) {
-      if (!d.sig) out.push({ text: 'No directions (sig).', tone: 'warn' });
+    more(d, rxs, out) {
+      for (const { rx, pre } of rxs) {
+        if (!rx.sig) out.push({ text: `${pre}No directions (sig).`, tone: 'warn' });
+        if (!rx.refills) out.push({ text: `${pre}No refill count.`, tone: 'warn' });
+        if (!rx.daw) out.push({ text: `${pre}DAW isn’t marked. Ask if substitution is allowed.`, tone: 'warn' });
+      }
       if (!d.dob) out.push({ text: 'No date of birth.', tone: 'warn' });
-      if (!d.refills) out.push({ text: 'No refill count.', tone: 'warn' });
-      if (!d.daw) out.push({ text: 'DAW isn’t marked. Ask if substitution is allowed.', tone: 'warn' });
       if (!d.npi && !d.dea) out.push({ text: 'No NPI or DEA number for the prescriber.', tone: 'warn' });
     },
   };
@@ -205,6 +212,7 @@
     readBack: 'Read it back to the pharmacist.',
     required: ['patient', 'drug', 'qty', 'refills', 'prescriber', 'rxNum',
       'pharmacy', 'pharmPhone', 'pharmacist', 'initials'],
+    rxRequired: [],
     requiredName: {
       patient: 'The patient’s name', drug: 'The drug', qty: 'The quantity',
       refills: 'Refills left', prescriber: 'The prescriber', rxNum: 'Their Rx number',
@@ -215,7 +223,8 @@
     cii: (drug) => `${drug} is Schedule II. A CII can’t be transferred over the phone — the only ` +
       'CII transfer allowed is a one-time electronic transfer of an unfilled e-script, pharmacy to pharmacy.',
     stopTitle: (cii) => (cii ? 'A Schedule II can’t be transferred by phone' : 'This needs valid DEA numbers'),
-    more(d, hit, out) {
+    more(d, rxs, out) {
+      const { hit } = rxs[0];
       if (/^(0+|none|no)$/i.test(d.refills)) {
         out.push({ text: 'Refills left is 0, so there’s nothing here to fill.', tone: 'err' });
       }
@@ -355,11 +364,344 @@
 
   const clampCopies = (v) => Math.max(1, Math.min(20, Math.floor(Number(v) || 1)));
 
+  const idOf = (key) => key.charAt(0).toUpperCase() + key.slice(1);
+
+  // ---- Finding the drug ---------------------------------------------------
+  /*
+   * Two ways in, because a call gives you one or the other.
+   *
+   * The caller says a name: DrugSearch matches it against a list held in
+   * memory, so options appear on the second keystroke with no network in
+   * the way — and it forgives the spelling, because whoever is typing is
+   * also listening. Few drugs match → its strengths are the list, because
+   * that is the choice left. Many match → one row each, and picking one
+   * narrows to its strengths.
+   *
+   * They read out an NDC instead: that goes to the FDA directory through
+   * the same NDC module the Bottle Label tab uses, and fills the drug line
+   * (and the quantity, if the package says one) from what comes back.
+   *
+   * drugLine() wires one drug box to both. The Transfer tab has one; a
+   * call-in has one per medication card.
+   *
+   *   el      — { drug, list, qty, ndc, ndcBtn, ndcStatus, ndcToggle, ndcRow }
+   *   idBase  — prefix for the suggestion rows' ids
+   *   changed — called whenever the line is filled in for you
+   */
+  function drugLine(el, idBase, changed) {
+    /*
+     * The schedule of whatever is on the drug line. A row picked from the list
+     * or an NDC lookup knows exactly what it is, so that answer is kept for as
+     * long as the line is left as it was filled; anything typed is read by
+     * DrugSearch.schedule().
+     */
+    let known = null;   // { text, hit } — the line as we filled it, and its schedule
+
+    function controlled() {
+      const text = el.drug.value.trim();
+      if (!text) return null;
+      if (known && known.text === text) return known.hit;
+      return DrugSearch.schedule(text);
+    }
+
+    let matches = [];
+    let active = -1;
+
+    /*
+     * The list is position: fixed (see .suggest in styles.css) so the column
+     * scrolling under it can't clip it: it goes under the box, or over it when
+     * there isn't room below.
+     */
+    function place() {
+      const r = el.drug.getBoundingClientRect();
+      const st = el.list.style;
+      st.left = `${r.left}px`;
+      st.width = `${r.width}px`;
+      if (window.innerHeight - r.bottom < 280 && r.top > window.innerHeight - r.bottom) {
+        st.top = '';
+        st.bottom = `${window.innerHeight - r.top + 4}px`;
+      } else {
+        st.bottom = '';
+        st.top = `${r.bottom + 4}px`;
+      }
+    }
+    const replace = () => { if (!el.list.hidden) place(); };
+    window.addEventListener('resize', replace);
+    document.addEventListener('scroll', replace, true);
+
+    function closeSuggest() {
+      matches = [];
+      active = -1;
+      el.list.hidden = true;
+      el.list.replaceChildren();
+      el.drug.setAttribute('aria-expanded', 'false');
+      el.drug.removeAttribute('aria-activedescendant');
+    }
+
+    function openSuggest() {
+      matches = DrugSearch.suggest(el.drug.value);
+      if (!matches.length) { closeSuggest(); return; }
+      active = -1;
+      el.list.replaceChildren(...matches.map((m, i) => {
+        const li = document.createElement('li');
+        li.id = `${idBase}Opt${i}`;
+        li.className = 'suggest-item';
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', 'false');
+        const main = document.createElement('span');
+        main.className = 'si-name';
+        main.textContent = m.text;
+        li.append(main);
+        // The other name it gets called by, so a brand-name call still lands.
+        if (m.sub && !new RegExp(`\\b${m.sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(m.text)) {
+          const sub = document.createElement('span');
+          sub.className = 'si-sub';
+          sub.textContent = m.sub;
+          li.append(sub);
+        }
+        // pointerdown, not click: it beats the input's blur.
+        li.addEventListener('pointerdown', (e) => { e.preventDefault(); accept(i); });
+        li.addEventListener('pointerenter', () => highlight(i));
+        return li;
+      }));
+      el.list.hidden = false;
+      place();
+      el.drug.setAttribute('aria-expanded', 'true');
+    }
+
+    function highlight(i) {
+      active = i;
+      [...el.list.children].forEach((li, n) => {
+        const on = n === i;
+        li.classList.toggle('on', on);
+        li.setAttribute('aria-selected', String(on));
+        if (on) li.scrollIntoView({ block: 'nearest' });
+      });
+      if (i >= 0) el.drug.setAttribute('aria-activedescendant', `${idBase}Opt${i}`);
+      else el.drug.removeAttribute('aria-activedescendant');
+    }
+
+    function accept(i) {
+      const m = matches[i];
+      if (!m) return;
+      el.drug.value = m.text;
+      known = { text: m.text, hit: m.drug.c ? { schedule: m.drug.c, drug: m.drug.g } : null };
+      closeSuggest();
+      changed();
+      // Picking a drug with no strength on it means the strength is still to
+      // come, so stay put; a complete line moves on to the quantity.
+      if (m.strength) el.qty.focus(); else el.drug.focus();
+    }
+
+    el.drug.addEventListener('input', openSuggest);
+    el.drug.addEventListener('focus', () => { if (el.drug.value.trim()) openSuggest(); });
+    el.drug.addEventListener('blur', () => setTimeout(closeSuggest, 0));
+    el.drug.addEventListener('keydown', (e) => {
+      if (el.list.hidden) {
+        if (e.key === 'ArrowDown' && el.drug.value.trim()) { e.preventDefault(); openSuggest(); }
+        return;
+      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); highlight((active + 1) % matches.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); highlight((active - 1 + matches.length) % matches.length); }
+      else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); accept(active); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeSuggest(); }
+      else if (e.key === 'Tab' && active >= 0) { accept(active); }
+    });
+
+    // --- By NDC ------------------------------------------------------------
+
+    let ndcRun = null;   // aborts the lookup still in flight
+
+    function ndcNote(text, tone) {
+      el.ndcStatus.textContent = text;
+      el.ndcStatus.className = `lookup${tone ? ` tone-${tone}` : ''}`;
+    }
+
+    async function lookupNdc() {
+      const raw = el.ndc.value.trim();
+      if (!raw) { ndcNote(''); return; }
+
+      const parsed = NDC.resolve(raw);
+      if (parsed.error) { ndcNote(parsed.error, 'err'); return; }
+      if (!NDC.isSearchable(raw)) { ndcNote("That doesn't read as an NDC.", 'err'); return; }
+
+      if (ndcRun) ndcRun.abort();
+      ndcRun = new AbortController();
+      const mine = ndcRun;
+      el.ndcBtn.disabled = true;
+      ndcNote('Looking it up…');
+      try {
+        const res = await NDC.lookup(raw, mine.signal);
+        if (mine !== ndcRun) return;           // a newer lookup took over
+        if (res.status === 'error') {
+          ndcNote('The FDA directory could not be reached — type the drug in instead.', 'warn');
+          return;
+        }
+        if (res.status !== 'found') {
+          ndcNote('No drug in the FDA directory has that NDC.', 'warn');
+          return;
+        }
+        fillFromFacts(res.facts, parsed.display || raw);
+      } catch (e) {
+        if (mine === ndcRun) ndcNote(e.message, 'err');
+      } finally {
+        if (mine === ndcRun) { el.ndcBtn.disabled = false; ndcRun = null; }
+      }
+    }
+
+    /** What came back from the FDA, written onto the form. */
+    function fillFromFacts(facts, shown) {
+      const line = [facts.name, facts.strength, tidyForm(facts.dosageForm)]
+        .map((p) => (p || '').trim()).filter(Boolean).join(' ');
+      if (line) {
+        el.drug.value = line;
+        // The FDA lists the schedule on the product itself — better than a guess.
+        const c = FDA_SCHEDULE[facts.schedule] || 0;
+        known = { text: line, hit: c ? { schedule: c, drug: facts.generic || facts.name || line } : null };
+      }
+
+      const filled = [];
+      if (line) filled.push('the drug');
+
+      // The full package is a good guess at the quantity, never an override.
+      const count = NDC.packageCount(facts.packageDescription);
+      if (count && !el.qty.value.trim()) {
+        el.qty.value = count.count;
+        filled.push(`quantity ${count.label}`);
+      }
+
+      closeSuggest();
+      changed();
+      const extra = facts.generic ? ` (${facts.generic})` : '';
+      ndcNote(
+        filled.length
+          ? `${shown} — filled in ${filled.join(' and ')}.${extra}`
+          : `${shown} found, but the entry had no drug name to use.`,
+        filled.length ? 'ok' : 'warn',
+      );
+    }
+
+    // The NDC box stays out of the way until someone reads one out.
+    el.ndcToggle.addEventListener('click', () => {
+      el.ndcRow.hidden = false;
+      el.ndcToggle.hidden = true;
+      el.ndc.focus();
+    });
+    el.ndcBtn.addEventListener('click', lookupNdc);
+    el.ndc.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      lookupNdc();
+    });
+
+    /** Forget the line: for a new call, or a card being thrown away. */
+    function reset() {
+      if (ndcRun) { ndcRun.abort(); ndcRun = null; el.ndcBtn.disabled = false; }
+      el.ndc.value = '';
+      el.ndcRow.hidden = true;
+      el.ndcToggle.hidden = false;
+      known = null;
+      ndcNote('');
+      closeSuggest();
+    }
+
+    return { controlled, reset };
+  }
+
+  // ---- One medication on a call-in ---------------------------------------
+  /*
+   * A card cloned from #cMedTpl: the drug line, quantity, refills, DAW and
+   * sig. Open, it is the fields; folded, it is a one-line summary to click
+   * back into. The form decides which card is open and what it is numbered.
+   */
+
+  const MED_FIELDS = ['drug', 'qty', 'refills', 'daw', 'sig'];
+  let medSeq = 0;   // unique ids for each card's boxes, so every label still works
+
+  function medCard(changed) {
+    const uid = ++medSeq;
+    const root = $('#cMedTpl').content.firstElementChild.cloneNode(true);
+    const part = (k) => root.querySelector(`[data-k="${k}"]`);
+    const idFor = (k) => `cMed${uid}${idOf(k)}`;
+
+    const f = {};
+    for (const k of MED_FIELDS) { f[k] = part(k); f[k].id = idFor(k); }
+    for (const l of root.querySelectorAll('label[data-for]')) l.htmlFor = idFor(l.dataset.for);
+
+    const ui = {
+      toggle: part('toggle'), num: part('num'), title: part('title'), detail: part('detail'),
+      sched: part('sched'), remove: part('remove'), body: part('body'),
+    };
+    const list = part('list');
+    list.id = idFor('list');
+    f.drug.setAttribute('aria-controls', list.id);
+
+    const line = drugLine({
+      drug: f.drug, list, qty: f.qty, ndc: part('ndc'), ndcBtn: part('ndcBtn'),
+      ndcStatus: part('ndcStatus'), ndcToggle: part('ndcToggle'), ndcRow: part('ndcRow'),
+    }, idFor('drug'), changed);
+
+    for (const el of Object.values(f)) el.addEventListener('input', changed);
+    Sig.attach(f.sig, changed);
+
+    function data() {
+      const d = {};
+      for (const k of MED_FIELDS) d[k] = f[k].value.trim();
+      d.schedule = (line.controlled() || {}).schedule || 0;
+      return d;
+    }
+
+    const blank = () => MED_FIELDS.every((k) => !f[k].value.trim());
+
+    let open = true;
+    function setOpen(on) {
+      open = on;
+      root.classList.toggle('open', on);
+      ui.body.hidden = !on;
+      ui.toggle.setAttribute('aria-expanded', String(on));
+    }
+
+    /** Number, summary line and schedule badge. `only`: the call's one card. */
+    function paint(n, only) {
+      const d = data();
+      ui.num.textContent = n;
+      ui.title.textContent = d.drug || 'New medication';
+      ui.title.classList.toggle('empty', !d.drug);
+
+      const bits = [];
+      const miss = (text) => {
+        const span = document.createElement('span');
+        span.className = 'miss';
+        span.textContent = text;
+        return span;
+      };
+      bits.push(d.qty ? `Qty ${d.qty}` : miss('No quantity'));
+      if (d.refills) {
+        bits.push(/^\d+$/.test(d.refills) ? `${d.refills} refill${d.refills === '1' ? '' : 's'}` : `Refills ${d.refills}`);
+      }
+      if (d.daw) bits.push(`DAW ${d.daw}`);
+      if (d.sig) bits.push(d.sig);
+      ui.detail.replaceChildren(...bits.flatMap((b, i) => (i ? [' · ', b] : [b])));
+
+      const hit = line.controlled();
+      ui.sched.hidden = !hit;
+      if (hit) {
+        ui.sched.textContent = `C-${ROMAN[hit.schedule]}`;
+        ui.sched.title = `Schedule ${ROMAN[hit.schedule]}`;
+        ui.sched.classList.toggle('cii', hit.schedule <= 2);
+      }
+      ui.remove.hidden = only;
+      ui.remove.setAttribute('aria-label', `Remove medication ${n}`);
+    }
+
+    return { root, f, ui, line, data, blank, setOpen, isOpen: () => open, paint };
+  }
+
   // ---- One form tab -------------------------------------------------------
 
   function makeForm(K) {
     const byId = (name) => document.getElementById(K.prefix + name);
-    const idOf = (key) => key.charAt(0).toUpperCase() + key.slice(1);
+    const panel = document.getElementById(`panel-${K.tab}`);
 
     const f = {};
     for (const k of K.fields) f[k] = byId(idOf(k));
@@ -369,15 +711,106 @@
     const upper = [...K.deas.map(([k]) => k), 'initials'];
 
     const deaNeed = K.deas.map(([k]) => [k, byId(`${idOf(k)}Need`)]);
-    const drugUi = {
-      list: byId('DrugList'), ndc: byId('Ndc'), ndcBtn: byId('NdcBtn'), ndcStatus: byId('NdcStatus'),
-    };
     const ui = {
-      preview: byId('Preview'), sheetInfo: byId('SheetInfo'), notes: byId('Notes'),
+      preview: byId('Preview'), stage: byId('Stage'), sheetInfo: byId('SheetInfo'), notes: byId('Notes'),
       stamp: byId('Stamp'), print: byId('Print'), clear: byId('Clear'), status: byId('Status'),
+      meds: byId('Meds'), addMed: byId('AddMed'), medCount: byId('MedCount'),
+      pager: byId('Pager'), prev: byId('Prev'), next: byId('Next'), page: byId('Page'),
     };
 
     f.initials.value = settings.initials;
+
+    // ---- The drugs on the form -------------------------------------------
+    /*
+     * A transfer is one prescription, so its drug line is part of the form. A
+     * call-in can carry several for the same patient: each is a card, one is
+     * open at a time, and each prints as its own slip. A card left completely
+     * empty is ignored — unless it is the only one, when it prints as a blank.
+     */
+    const line = K.multi ? null : drugLine({
+      drug: f.drug, list: byId('DrugList'), qty: f.qty, ndc: byId('Ndc'), ndcBtn: byId('NdcBtn'),
+      ndcStatus: byId('NdcStatus'), ndcToggle: byId('NdcToggle'), ndcRow: byId('NdcRow'),
+    }, `${K.prefix}Drug`, render);
+
+    let cards = [];
+    let shown = 0;       // which slip the preview is showing
+    let slipCount = 1;   // slips per copy, as last drawn
+
+    function printable() {
+      const live = cards.filter((c) => !c.blank());
+      return live.length ? live : cards.slice(0, 1);
+    }
+
+    function openCard(card) {
+      for (const c of cards) c.setOpen(c === card);
+    }
+
+    function addCard({ focus = true } = {}) {
+      // An empty card is already waiting: use it rather than stacking another.
+      const last = cards[cards.length - 1];
+      if (last && last.blank()) {
+        openCard(last);
+        if (focus) last.f.drug.focus();
+        return;
+      }
+      const card = medCard(render);
+      cards.push(card);
+      ui.meds.append(card.root);
+      openCard(card);
+
+      card.ui.toggle.addEventListener('click', () => {
+        if (card.isOpen() && cards.length > 1) { card.setOpen(false); return; }
+        openCard(card);
+        card.f.drug.focus();
+      });
+      card.ui.remove.addEventListener('click', () => removeCard(card));
+      // The preview follows whichever drug you're working on.
+      const follow = () => {
+        const i = printable().indexOf(card);
+        if (i >= 0 && i !== shown) { shown = i; render(); }
+      };
+      card.root.addEventListener('focusin', follow);
+      card.root.addEventListener('input', follow);
+
+      render();
+      if (focus) card.f.drug.focus();
+    }
+
+    async function removeCard(card) {
+      if (cards.length < 2) return;
+      if (!card.blank()) {
+        const what = card.f.drug.value.trim() || `medication ${cards.indexOf(card) + 1}`;
+        if (!(await askConfirm(`Remove ${what} from this call?`, { ok: 'Remove' }))) return;
+      }
+      const i = cards.indexOf(card);
+      const wasOpen = card.isOpen();
+      card.line.reset();
+      card.root.remove();
+      cards.splice(i, 1);
+      const next = cards[Math.min(i, cards.length - 1)];
+      if (wasOpen) openCard(next);
+      render();
+      next.ui.toggle.focus();
+    }
+
+    /*
+     * Each prescription on the form, for checking: its data, its schedule,
+     * the boxes to send the cursor to, and "Rx 2: " to put in front of what's
+     * said about it when there's more than one.
+     */
+    function rxList(d) {
+      if (!K.multi) return [{ rx: d, hit: line.controlled(), pre: '', el: f, card: null }];
+      const live = printable();
+      return live.map((c, i) => ({
+        rx: d.meds[i], hit: c.line.controlled(), el: c.f, card: c,
+        pre: live.length > 1 ? `Rx ${cards.indexOf(c) + 1}: ` : '',
+      }));
+    }
+
+    function focusOn(n) {
+      if (n.card) openCard(n.card);
+      n.el.focus();
+    }
 
     // ---- The call on the form --------------------------------------------
 
@@ -388,23 +821,9 @@
       for (const k of K.fields) d[k] = upper.includes(k) ? val(f[k]).toUpperCase() : val(f[k]);
       d.initials = val(f.initials).toUpperCase();
       d.org = settings.org.trim();
-      d.schedule = (controlled() || {}).schedule || 0;
+      if (K.multi) d.meds = printable().map((c) => c.data());
+      else d.schedule = (line.controlled() || {}).schedule || 0;
       return d;
-    }
-
-    /*
-     * The schedule of whatever is on the drug line. A row picked from the list
-     * or an NDC lookup knows exactly what it is, so that answer is kept for as
-     * long as the line is left as it was filled; anything typed is read by
-     * DrugSearch.schedule().
-     */
-    let known = null;   // { text, hit } — the line as we filled it, and its schedule
-
-    function controlled() {
-      const text = f.drug.value.trim();
-      if (!text) return null;
-      if (known && known.text === text) return known.hit;
-      return DrugSearch.schedule(text);
     }
 
     /*
@@ -415,28 +834,38 @@
      */
     function problems(d) {
       const out = [];
-      const hit = controlled();
-      if (hit && hit.schedule <= 2) {
-        out.push({ text: K.cii(hit.drug), tone: 'stop', focus: f.drug });
-      } else if (hit) {
-        const sched = `Schedule ${ROMAN[hit.schedule]}`;
+      const rxs = rxList(d);
+      const hits = rxs.filter((r) => r.hit);
+      for (const r of hits.filter((x) => x.hit.schedule <= 2)) {
+        out.push({ text: r.pre + K.cii(r.hit.drug), tone: 'stop', cii: true, el: r.el.drug, card: r.card });
+      }
+      const ctl = hits.find((r) => r.hit.schedule >= 3);
+      if (ctl) {
+        const sched = `Schedule ${ROMAN[ctl.hit.schedule]}`;
         for (const [k, name] of K.deas) {
           const bad = d[k] ? deaProblem(d[k]) : '';
           if (!d[k]) {
-            out.push({ text: `${hit.drug} is ${sched}, so ${name} is required.`, tone: 'stop', focus: f[k] });
+            out.push({ text: `${ctl.hit.drug} is ${sched}, so ${name} is required.`, tone: 'stop', el: f[k] });
           } else if (bad) {
-            out.push({ text: `${hit.drug} is ${sched}, and ${name} ${bad}. ${K.readBack}`, tone: 'stop', focus: f[k] });
+            out.push({ text: `${ctl.hit.drug} is ${sched}, and ${name} ${bad}. ${K.readBack}`, tone: 'stop', el: f[k] });
           }
         }
-      } else {
+      } else if (!hits.length) {
         for (const [k, name] of K.deas) {
           const bad = d[k] ? deaProblem(d[k]) : '';
           if (bad) out.push({ text: `${upperFirst(name)} ${bad}.`, tone: 'warn' });
         }
       }
-      const missing = K.required.filter((k) => !d[k]).map((k) => K.requiredName[k]);
-      for (const m of missing) out.push({ text: `${m} is blank — it prints as a line to write on.`, tone: 'err' });
-      K.more(d, hit, out);
+      const blankLine = 'is blank — it prints as a line to write on.';
+      for (const k of K.required) {
+        if (!d[k]) out.push({ text: `${K.requiredName[k]} ${blankLine}`, tone: 'err' });
+      }
+      for (const r of rxs) {
+        for (const k of K.rxRequired) {
+          if (!r.rx[k]) out.push({ text: `${r.pre}${K.requiredName[k]} ${blankLine}`, tone: 'err' });
+        }
+      }
+      K.more(d, rxs, out);
       return out;
     }
 
@@ -470,6 +899,23 @@
     if (typeof ResizeObserver === 'function') new ResizeObserver(fitPreview).observe(sheetBox);
     fitPreview();
 
+    // The preview in the print bar is small; click it (or Enter) to see the
+    // slip full size, and click again or Escape to put it back.
+    function zoom(on) {
+      ui.stage.classList.toggle('zoomed', on);
+      ui.stage.setAttribute('aria-label', on ? 'Shrink the preview' : 'Enlarge the preview');
+      ui.stage.title = on ? 'Click to close' : 'Click to enlarge';
+    }
+    ui.stage.addEventListener('click', () => zoom(!ui.stage.classList.contains('zoomed')));
+    ui.stage.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      zoom(!ui.stage.classList.contains('zoomed'));
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && ui.stage.classList.contains('zoomed')) zoom(false);
+    });
+
     let queued = false;
     function render() {
       if (queued) return;
@@ -486,15 +932,27 @@
       shownStamp = `${t.date} ${t.time}`;
       ui.stamp.textContent = `${t.date} at ${t.time}`;
 
-      const html = CallInForm.sheet(d, { at, cutLine: settings.cut });
+      slipCount = CallInForm.count(d);
+      shown = Math.min(shown, slipCount - 1);
+      const html = CallInForm.sheet(d, { at, cutLine: settings.cut, index: shown });
       if (frameReady) paint(html); else pending = html;
       fitPreview();
 
+      if (K.multi) {
+        cards.forEach((c, i) => c.paint(i + 1, cards.length === 1));
+        const n = cards.filter((c) => !c.blank()).length;
+        ui.medCount.textContent = n > 1 ? `— ${n} on this call` : '';
+        ui.pager.hidden = slipCount < 2;
+        ui.page.textContent = `Slip ${shown + 1} of ${slipCount}`;
+        ui.prev.disabled = shown === 0;
+        ui.next.disabled = shown >= slipCount - 1;
+      }
+
       const list = problems(d);
-      const needDea = d.schedule >= 3;
+      const ctl = rxList(d).find((r) => r.hit && r.hit.schedule >= 3);
       for (const [, el] of deaNeed) {
-        el.textContent = needDea ? `— required, Schedule ${ROMAN[d.schedule]}` : '— for controlled';
-        el.className = needDea ? 'opt tone-err' : 'opt';
+        el.textContent = ctl ? `— required, C-${ROMAN[ctl.hit.schedule]}` : '— for controlled';
+        el.className = ctl ? 'opt tone-err' : 'opt';
       }
       ui.notes.replaceChildren(...list.map((n) => {
         const li = document.createElement('li');
@@ -508,12 +966,19 @@
 
     function renderSheetInfo() {
       const copies = clampCopies(f.copies.value);
+      const n = slipCount * copies;
       const where = !PaperPrint.isNative
         ? 'the browser print dialog'
         : settings.printer ? `“${printerLabel()}”` : 'the printer you pick in the dialog';
+      if (n === 1) {
+        ui.sheetInfo.textContent =
+          `8.5" × 5.5" — the top half of a Letter sheet; the bottom half comes out blank. One page to ${where}.`;
+        return;
+      }
+      const pages = Math.ceil(n / 2);
       ui.sheetInfo.textContent =
-        `8.5" × 5.5" — the top half of a Letter sheet; the bottom half comes out blank. ` +
-        `${copies === 1 ? 'One page' : `${copies} pages`} to ${where}.`;
+        `${n} slips${slipCount > 1 ? ' (one per medication)' : ''}, 8.5" × 5.5" each, two to a Letter sheet. ` +
+        `${pages === 1 ? 'One page' : `${pages} pages`} to ${where}.`;
     }
 
     // Keep the printed time honest while the form sits open during a long call.
@@ -534,10 +999,10 @@
       const stops = list.filter((n) => n.tone === 'stop');
       if (stops.length) {
         await askConfirm(
-          K.stopTitle(d.schedule <= 2),
+          K.stopTitle(stops.some((n) => n.cii)),
           { ok: 'OK', cancel: null, detail: stops.map((n) => n.text) },
         );
-        stops[0].focus.focus();
+        focusOn(stops[0]);
         return;
       }
 
@@ -545,7 +1010,8 @@
 
       // Everything blank is almost certainly a slip of the finger, not a
       // blank form on purpose — but a blank form on purpose is legitimate, so ask.
-      const allBlank = K.required.every((k) => !d[k]);
+      const allBlank = K.required.every((k) => !d[k]) &&
+        rxList(d).every((r) => K.rxRequired.every((k) => !r.rx[k]));
       if (blocking.length && !(await askConfirm(
         allBlank ? K.blankTitle : 'Print this form anyway?',
         { ok: 'Print anyway', detail: list.map((n) => n.text) },
@@ -557,8 +1023,10 @@
       ui.print.textContent = 'Printing…';
       try {
         const copies = clampCopies(f.copies.value);
+        const per = CallInForm.count(d);
+        const set = per === 1 ? 'the form' : `${per} slips`;
         const doc = CallInForm.doc(d, { at: new Date(), copies, cutLine: settings.cut });
-        await send(doc, ui.status, `Printed ${copies === 1 ? 'the form' : `${copies} copies`}.`);
+        await send(doc, ui.status, `Printed ${copies === 1 ? set : `${copies} copies of ${set}`}.`);
       } catch (e) {
         showStatus(ui.status, false, `✗ ${e.message}`);
       } finally {
@@ -573,16 +1041,20 @@
 
     function clearCall() {
       for (const el of callFields) el.value = '';
-      drugUi.ndc.value = '';
-      known = null;
+      if (K.multi) {
+        for (const c of cards) { c.line.reset(); c.root.remove(); }
+        cards = [];
+        shown = 0;
+        addCard({ focus: false });
+      } else {
+        line.reset();
+      }
     }
 
     async function newCall() {
-      const touched = callFields.some((el) => el.value.trim());
+      const touched = callFields.some((el) => el.value.trim()) || cards.some((c) => !c.blank());
       if (touched && !(await askConfirm(`Clear this ${K.what} and start a new one?`, { ok: 'Clear' }))) return;
       clearCall();
-      ndcNote('');
-      closeSuggest();
       f.initials.value = settings.initials;   // your own initials stay put
       delete f.initials.dataset.typed;        // …and follow Settings again
       f.copies.value = '1';
@@ -590,189 +1062,6 @@
       render();
       f.patient.focus();
     }
-
-    // ---- Finding the drug -------------------------------------------------
-    /*
-     * Two ways in, because a call gives you one or the other.
-     *
-     * The caller says a name: DrugSearch matches it against a list held in
-     * memory, so options appear on the second keystroke with no network in
-     * the way — and it forgives the spelling, because whoever is typing is
-     * also listening. Few drugs match → its strengths are the list, because
-     * that is the choice left. Many match → one row each, and picking one
-     * narrows to its strengths.
-     *
-     * They read out an NDC instead: that goes to the FDA directory through
-     * the same NDC module the Bottle Label tab uses, and fills the drug line
-     * (and the quantity, if the package says one) from what comes back.
-     */
-
-    let matches = [];
-    let active = -1;
-    let ignoreNextInput = false;   // set when we filled the box ourselves
-
-    function closeSuggest() {
-      matches = [];
-      active = -1;
-      drugUi.list.hidden = true;
-      drugUi.list.replaceChildren();
-      f.drug.setAttribute('aria-expanded', 'false');
-      f.drug.removeAttribute('aria-activedescendant');
-    }
-
-    function openSuggest() {
-      const q = f.drug.value;
-      matches = DrugSearch.suggest(q);
-      if (!matches.length) { closeSuggest(); return; }
-      active = -1;
-      drugUi.list.replaceChildren(...matches.map((m, i) => {
-        const li = document.createElement('li');
-        li.id = `${K.prefix}DrugOpt${i}`;
-        li.className = 'suggest-item';
-        li.setAttribute('role', 'option');
-        li.setAttribute('aria-selected', 'false');
-        const main = document.createElement('span');
-        main.className = 'si-name';
-        main.textContent = m.text;
-        li.append(main);
-        // The other name it gets called by, so a brand-name call still lands.
-        if (m.sub && !new RegExp(`\\b${m.sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(m.text)) {
-          const sub = document.createElement('span');
-          sub.className = 'si-sub';
-          sub.textContent = m.sub;
-          li.append(sub);
-        }
-        // pointerdown, not click: it beats the input's blur.
-        li.addEventListener('pointerdown', (e) => { e.preventDefault(); accept(i); });
-        li.addEventListener('pointerenter', () => highlight(i));
-        return li;
-      }));
-      drugUi.list.hidden = false;
-      f.drug.setAttribute('aria-expanded', 'true');
-    }
-
-    function highlight(i) {
-      active = i;
-      [...drugUi.list.children].forEach((li, n) => {
-        const on = n === i;
-        li.classList.toggle('on', on);
-        li.setAttribute('aria-selected', String(on));
-        if (on) li.scrollIntoView({ block: 'nearest' });
-      });
-      if (i >= 0) f.drug.setAttribute('aria-activedescendant', `${K.prefix}DrugOpt${i}`);
-      else f.drug.removeAttribute('aria-activedescendant');
-    }
-
-    function accept(i) {
-      const m = matches[i];
-      if (!m) return;
-      ignoreNextInput = true;
-      f.drug.value = m.text;
-      known = { text: m.text, hit: m.drug.c ? { schedule: m.drug.c, drug: m.drug.g } : null };
-      closeSuggest();
-      render();
-      // Picking a drug with no strength on it means the strength is still to
-      // come, so stay put; a complete line moves on to the quantity.
-      if (m.strength) f.qty.focus(); else f.drug.focus();
-    }
-
-    f.drug.addEventListener('input', () => {
-      if (ignoreNextInput) { ignoreNextInput = false; return; }
-      openSuggest();
-    });
-    f.drug.addEventListener('focus', () => { if (f.drug.value.trim()) openSuggest(); });
-    f.drug.addEventListener('blur', () => setTimeout(closeSuggest, 0));
-    f.drug.addEventListener('keydown', (e) => {
-      if (drugUi.list.hidden) {
-        if (e.key === 'ArrowDown' && f.drug.value.trim()) { e.preventDefault(); openSuggest(); }
-        return;
-      }
-      if (e.key === 'ArrowDown') { e.preventDefault(); highlight((active + 1) % matches.length); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); highlight((active - 1 + matches.length) % matches.length); }
-      else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); accept(active); }
-      else if (e.key === 'Escape') { e.preventDefault(); closeSuggest(); }
-      else if (e.key === 'Tab' && active >= 0) { accept(active); }
-    });
-
-    // --- By NDC ------------------------------------------------------------
-
-    let ndcRun = null;   // aborts the lookup still in flight
-
-    function ndcNote(text, tone) {
-      drugUi.ndcStatus.textContent = text;
-      drugUi.ndcStatus.className = `lookup${tone ? ` tone-${tone}` : ''}`;
-    }
-
-    async function lookupNdc() {
-      const raw = drugUi.ndc.value.trim();
-      if (!raw) { ndcNote(''); return; }
-
-      const parsed = NDC.resolve(raw);
-      if (parsed.error) { ndcNote(parsed.error, 'err'); return; }
-      if (!NDC.isSearchable(raw)) { ndcNote("That doesn't read as an NDC.", 'err'); return; }
-
-      if (ndcRun) ndcRun.abort();
-      ndcRun = new AbortController();
-      const mine = ndcRun;
-      drugUi.ndcBtn.disabled = true;
-      ndcNote('Looking it up…');
-      try {
-        const res = await NDC.lookup(raw, mine.signal);
-        if (mine !== ndcRun) return;           // a newer lookup took over
-        if (res.status === 'error') {
-          ndcNote('The FDA directory could not be reached — type the drug in instead.', 'warn');
-          return;
-        }
-        if (res.status !== 'found') {
-          ndcNote('No drug in the FDA directory has that NDC.', 'warn');
-          return;
-        }
-        fillFromFacts(res.facts, parsed.display || raw);
-      } catch (e) {
-        if (mine === ndcRun) ndcNote(e.message, 'err');
-      } finally {
-        if (mine === ndcRun) { drugUi.ndcBtn.disabled = false; ndcRun = null; }
-      }
-    }
-
-    /** What came back from the FDA, written onto the form. */
-    function fillFromFacts(facts, shown) {
-      const line = [facts.name, facts.strength, tidyForm(facts.dosageForm)]
-        .map((p) => (p || '').trim()).filter(Boolean).join(' ');
-      if (line) {
-        f.drug.value = line;
-        // The FDA lists the schedule on the product itself — better than a guess.
-        const c = FDA_SCHEDULE[facts.schedule] || 0;
-        known = { text: line, hit: c ? { schedule: c, drug: facts.generic || facts.name || line } : null };
-      }
-
-      const filled = [];
-      if (line) filled.push('the drug');
-
-      // The full package is a good guess at the quantity, never an override.
-      const count = NDC.packageCount(facts.packageDescription);
-      if (count && !f.qty.value.trim()) {
-        f.qty.value = count.count;
-        filled.push(`quantity ${count.label}`);
-      }
-
-      closeSuggest();
-      render();
-      const extra = facts.generic ? ` (${facts.generic})` : '';
-      ndcNote(
-        filled.length
-          ? `${shown} — filled in ${filled.join(' and ')}.${extra}`
-          : `${shown} found, but the entry had no drug name to use.`,
-        filled.length ? 'ok' : 'warn',
-      );
-    }
-
-    drugUi.ndcBtn.addEventListener('click', lookupNdc);
-    drugUi.ndc.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      lookupNdc();
-    });
 
     // ---- Events -----------------------------------------------------------
 
@@ -809,7 +1098,19 @@
         if (tidy !== el.value) { el.value = tidy; render(); }
       });
     }
-    Sig.attach(f.sig, render);
+    if (K.multi) {
+      ui.addMed.addEventListener('click', () => addCard());
+      // Ctrl+Enter anywhere on the form: the next drug on the call.
+      panel.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        addCard();
+      });
+      ui.prev.addEventListener('click', () => { shown = Math.max(0, shown - 1); render(); });
+      ui.next.addEventListener('click', () => { shown += 1; render(); });
+    } else {
+      Sig.attach(f.sig, render);
+    }
 
     ui.print.addEventListener('click', print);
     ui.clear.addEventListener('click', newCall);

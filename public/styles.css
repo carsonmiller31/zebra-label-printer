@@ -392,36 +392,97 @@ details.price-code #pCodeWord { text-transform: uppercase; letter-spacing: .1em;
 }
 div[id^="view-"][hidden] { display: none; }
 
-/* ---- Call-in script ---- */
-.callin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; align-items: start; }
-@media (max-width: 980px) { .callin-grid { grid-template-columns: 1fr; } }
+/* ---- Call-in script ----
+   Two columns of fields over a print bar (preview, warnings, Print). While a
+   phone form is showing, the page is sized to the window so the whole call
+   and the Print button are on screen together; a column that runs out of
+   room scrolls on its own instead of pushing Print off the bottom. */
+.callin-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px 18px;
+}
+.callin-col {
+  display: flex; flex-direction: column; gap: 12px;
+  /* Room for focus rings, which the scroll box would otherwise clip. */
+  padding: 3px; margin: -3px;
+}
+.print-bar {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: 240px minmax(0, 1fr) 250px; gap: 18px;
+  border-top: 1px solid var(--border); padding-top: 14px;
+}
+.print-preview { display: flex; flex-direction: column; gap: 6px; }
+/* As tall as the preview beside it, and scrolls past that. */
+.print-notes { contain: size; overflow: auto; }
+.print-actions { display: flex; flex-direction: column; gap: 8px; }
+.print-actions .print-row { margin-top: 0; flex-wrap: nowrap; }
+.print-actions .copies { width: 72px; }
+.print-row #cPrint, .print-row #tPrint { flex: 1; min-width: 0; padding: 11px 16px; font-size: 15px; }
+.print-actions #cClear, .print-actions #tClear { width: 100%; }
+.print-actions .hint { margin-top: 0; }
+.print-actions .status { margin-top: 0; padding: 8px 11px; font-size: 13px; }
+.stamp-line { font-size: 12px; color: var(--muted); }
+.stamp-line span { color: var(--text); font-weight: 600; margin-left: 4px; }
 
-.callin-form { display: flex; flex-direction: column; gap: 16px; }
+@media (min-width: 760px) and (min-height: 560px) {
+  body:has(#view-paper:not([hidden]) > .callin:not([hidden])) .wrap {
+    max-width: 1360px; height: 100vh; display: flex; flex-direction: column;
+    padding-top: 16px; padding-bottom: 14px;
+  }
+  body:has(#view-paper:not([hidden]) > .callin:not([hidden])) .head-bar { margin-bottom: 12px; }
+  body:has(#view-paper:not([hidden]) > .callin:not([hidden])) #modeSub { display: none; }
+  #view-paper:not([hidden]):has(> .callin:not([hidden])) {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+  }
+  #view-paper > .callin:not([hidden]) {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    margin-bottom: 0; padding: 14px 18px 16px;
+  }
+  .callin-grid { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; }
+  .callin-col { min-height: 0; overflow: auto; }
+}
+@media (max-width: 759px) {
+  .callin-grid, .print-bar { grid-template-columns: 1fr; }
+  .print-notes { contain: none; }
+}
+
+.callin-form { display: flex; flex-direction: column; gap: 12px; }
 fieldset.block {
   border: 1px solid var(--border); border-radius: 10px; margin: 0;
   padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px;
   background: var(--panel-2);
 }
 fieldset.block legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+/* Tighter than the label tabs: a whole call has to fit on one screen. */
+.callin fieldset.block { padding: 6px 14px 14px; gap: 10px; }
+.callin label { margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.callin .row { gap: 10px; }
+.callin .row > div { min-width: 0; }
+.callin .row > .ini-col { flex: 0 0 76px; }
+.callin input, .callin select { padding: 8px 10px; }
+.callin input.big { font-size: 17px; padding: 8px 11px; }
 .callin-form textarea {
-  min-height: 62px; font-family: inherit; font-size: 14px; background: var(--panel);
+  min-height: 54px; font-family: inherit; font-size: 14px; background: var(--panel);
 }
+.label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.label-row label { flex: 1; min-width: 0; }
+.label-row .link-btn { flex: none; padding: 0; }
+.field.combo .ndc-row { margin-top: 8px; }
+.field.combo .ndc-row[hidden] { display: none; }
 input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 700; }
-.stamp-live .stamp {
-  padding: 9px 11px; font-size: 14px; color: var(--muted);
-  border: 1px dashed var(--border); border-radius: 8px; background: var(--panel);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 
-.callin-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
-.callin-side .status { margin-top: 0; }
-.print-row #cPrint, .print-row #tPrint { flex: 1; min-width: 160px; padding: 12px 18px; font-size: 15px; }
-
-/* The preview is the printed document itself, scaled down to fit. */
+/* The preview is the printed document itself, scaled down to fit. Click it
+   to see it full size. */
 .paper-stage {
   background: #e9ecf1; border: 1px solid var(--border); border-radius: 10px;
-  padding: 20px; display: flex; justify-content: center;
+  padding: 10px; display: flex; justify-content: center; cursor: zoom-in;
 }
+.paper-stage:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, .25); }
+.paper-stage.zoomed {
+  position: fixed; inset: 0; z-index: 70; border: 0; border-radius: 0;
+  background: rgba(16, 24, 40, .55); align-items: center; padding: 40px; cursor: zoom-out;
+}
+.paper-stage.zoomed .paper-sheet { width: min(1100px, calc((100vh - 80px) * 8.5 / 5.5)); }
 .paper-sheet {
   position: relative; width: 100%; aspect-ratio: 8.5 / 5.5;
   background: #fff; overflow: hidden;
@@ -430,8 +491,11 @@ input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 
 .paper-sheet iframe {
   position: absolute; top: 0; left: 0;
   width: 816px; height: 528px;   /* 8.5in x 5.5in at 96 dpi */
-  border: 0; transform-origin: 0 0;
+  border: 0; transform-origin: 0 0; pointer-events: none;
 }
+.print-preview .pager { gap: 8px; }
+.print-preview .pager button { padding: 0 10px; font-size: 16px; }
+.pager[hidden] { display: none; }
 
 /* ---- Paper settings ---- */
 .settings-grid { display: flex; flex-direction: column; gap: 18px; max-width: 660px; }
@@ -447,9 +511,11 @@ input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 
 
 /* ---- Drug suggestions ---- */
 .field.combo { position: relative; }
+/* Fixed, and placed by paper/ui.js under (or over) the box, so a column that
+   scrolls can't clip the list. */
 .suggest {
-  position: absolute; z-index: 20; left: 0; right: 0; top: 100%;
-  margin: 4px 0 0; padding: 4px; list-style: none;
+  position: fixed; z-index: 20;
+  margin: 0; padding: 4px; list-style: none;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 28px rgba(16, 24, 40, .16);
   max-height: 268px; overflow: auto;
@@ -465,6 +531,61 @@ input.initials { text-transform: uppercase; letter-spacing: .14em; font-weight: 
 .suggest-item.on { background: var(--accent); color: #fff; }
 .suggest-item.on .si-sub { color: rgba(255, 255, 255, .8); }
 
-.ndc-lookup { margin-top: -4px; }
-.ndc-lookup .ndc-row input { flex: 1; }
-.ndc-lookup .lookup:empty { display: none; }
+.field.combo .lookup:empty { display: none; }
+
+/* ---- Call-in medications ----
+   One card per drug on the call. The one being typed is open; the rest fold
+   to a one-line summary so a four-drug call still fits on the screen. */
+.meds { display: flex; flex-direction: column; gap: 8px; }
+.med {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.med.open { border-color: #c3cfe8; box-shadow: 0 1px 3px rgba(16, 24, 40, .07); }
+.med-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; }
+.med-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  background: none; color: var(--text); padding: 2px 4px; border-radius: 6px;
+  font-weight: 400; text-align: left;
+}
+.med-toggle:hover { background: none; }
+.med:not(.open) .med-toggle:hover .ms-drug { color: var(--accent); }
+.med-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, .25); }
+.med-num {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+}
+.med:not(.open) .med-num { background: var(--panel-2); color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.med-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.ms-drug, .ms-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-drug { font-size: 14px; font-weight: 600; }
+.ms-drug.empty { color: var(--muted); font-weight: 500; }
+.ms-detail { font-size: 12px; color: var(--muted); }
+.ms-detail .miss { color: #a16207; }
+.med.open .ms-detail { display: none; }
+.med-sched {
+  flex: none; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .05em;
+  background: rgba(161, 98, 7, .1); color: #a16207; border: 1px solid rgba(161, 98, 7, .3);
+}
+.med-sched.cii { background: rgba(220, 38, 38, .08); color: var(--err); border-color: rgba(220, 38, 38, .35); }
+.med-sched[hidden] { display: none; }
+.med-remove {
+  flex: none; background: none; color: var(--muted);
+  padding: 2px 9px 4px; border-radius: 6px; font-size: 20px; font-weight: 400; line-height: 1;
+}
+.med-remove:hover { background: rgba(220, 38, 38, .07); color: var(--err); }
+.med-remove[hidden] { display: none; }
+.med-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.med-body[hidden] { display: none; }
+
+.add-med {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: none; color: var(--accent); border: 1.5px dashed #b6c4e4; padding: 8px;
+}
+.add-med:hover { background: rgba(37, 99, 235, .06); border-color: var(--accent); }
+.add-med kbd {
+  font: 500 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted);
+  padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
+}

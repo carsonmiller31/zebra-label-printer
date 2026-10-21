@@ -444,10 +444,11 @@
         <button type="button" role="tab" class="tab ptab" id="tab-settings" data-ptab="settings" aria-controls="panel-settings">Settings</button>
       </nav>
 
-      <!-- Call-in script: a phoned-in prescription, written down and printed -->
+      <!-- Call-in script: a phoned-in prescription, written down and printed.
+           Two columns of fields over a print bar, sized to fit the window. -->
       <section class="card callin" id="panel-callin" role="tabpanel" aria-labelledby="tab-callin" hidden>
         <div class="callin-grid">
-          <div class="callin-form">
+          <div class="callin-form callin-col">
 
             <fieldset class="block">
               <legend>Patient</legend>
@@ -460,50 +461,6 @@
                   <label for="cDob">Date of birth</label>
                   <input id="cDob" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="04/11/1958" />
                 </div>
-              </div>
-            </fieldset>
-
-            <fieldset class="block">
-              <legend>Prescription</legend>
-              <div class="field combo">
-                <label for="cDrug">Drug, strength &amp; form</label>
-                <input id="cDrug" class="big" type="text" autocomplete="off" spellcheck="false"
-                       role="combobox" aria-expanded="false" aria-autocomplete="list"
-                       aria-controls="cDrugList" placeholder="Atorvastatin 40 mg tablet" />
-                <ul id="cDrugList" class="suggest" role="listbox" aria-label="Drug suggestions" hidden></ul>
-              </div>
-
-              <div class="field ndc-lookup">
-                <label for="cNdc">Or look it up by NDC <span class="opt">— from the bottle</span></label>
-                <div class="ndc-row">
-                  <input id="cNdc" class="mono" type="text" autocomplete="off" spellcheck="false"
-                         placeholder="0093-7180-56" />
-                  <button type="button" class="secondary" id="cNdcBtn">Look up</button>
-                </div>
-                <div id="cNdcStatus" class="lookup" aria-live="polite"></div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="cQty">Quantity</label>
-                  <input id="cQty" type="text" autocomplete="off" placeholder="90" />
-                </div>
-                <div>
-                  <label for="cRefills">Refills</label>
-                  <input id="cRefills" type="text" autocomplete="off" placeholder="3" />
-                </div>
-                <div>
-                  <label for="cDaw">DAW</label>
-                  <select id="cDaw">
-                    <option value="">Not said</option>
-                    <option value="0">0 · Substitution OK</option>
-                    <option value="1">1 · Dispense as written</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field">
-                <label for="cSig">Directions <span class="opt">— the sig, as dictated</span></label>
-                <textarea id="cSig" rows="2" spellcheck="true" placeholder="1 tab po qhs"></textarea>
-                <div class="hint">Shorthand spells itself out: <span class="mono">1 tab po bid prn pain</span> → Take 1 tablet by mouth twice daily as needed for pain. Backspace right after to undo.</div>
               </div>
             </fieldset>
 
@@ -536,39 +493,113 @@
                   <label for="cPhone">Call-back phone</label>
                   <input id="cPhone" class="mono" type="tel" autocomplete="off" placeholder="(555) 123-4567" />
                 </div>
-              </div>
-              <div class="row">
-                <div style="max-width:140px;">
-                  <label for="cInitials">Taken by <span class="opt">— initials</span></label>
+                <div class="ini-col">
+                  <label for="cInitials">Taken by</label>
                   <input id="cInitials" class="mono initials" type="text" maxlength="4" autocomplete="off" placeholder="CM" />
-                </div>
-                <div class="stamp-live">
-                  <div class="lbl">Timestamp</div>
-                  <div class="stamp" id="cStamp"></div>
                 </div>
               </div>
             </fieldset>
 
           </div>
 
-          <div class="callin-side">
-            <div class="paper-stage">
-              <div class="paper-sheet">
-                <iframe id="cPreview" title="Form preview" scrolling="no"></iframe>
-              </div>
-            </div>
-            <div class="hint" id="cSheetInfo"></div>
-            <ul class="notes" id="cNotes"></ul>
+          <div class="callin-form callin-col">
+            <fieldset class="block">
+              <legend>Medications <span class="opt" id="cMedCount"></span></legend>
+              <div class="meds" id="cMeds"></div>
+              <button type="button" class="add-med" id="cAddMed">
+                + Add another medication <kbd>Ctrl+Enter</kbd>
+              </button>
+              <div class="hint">Each prints on its own slip. Sig shorthand spells out: <span class="mono">1 tab po bid</span> → Take 1 tablet by mouth twice daily.</div>
+            </fieldset>
+          </div>
 
-            <div class="print-row">
-              <div class="copies">
-                <label for="cCopies">Copies</label>
-                <input id="cCopies" type="number" min="1" max="20" value="1" />
+          <!-- One medication on the call. Cloned into #cMeds by paper/ui.js;
+               data-k marks each part, and ids are given out on cloning. -->
+          <template id="cMedTpl">
+            <div class="med">
+              <div class="med-head">
+                <button type="button" class="med-toggle" data-k="toggle" aria-expanded="true">
+                  <span class="med-num" data-k="num"></span>
+                  <span class="med-text">
+                    <span class="ms-drug" data-k="title"></span>
+                    <span class="ms-detail" data-k="detail"></span>
+                  </span>
+                </button>
+                <span class="med-sched" data-k="sched" hidden></span>
+                <button type="button" class="med-remove" data-k="remove" aria-label="Remove this medication" title="Remove">&times;</button>
               </div>
-              <button type="button" id="cPrint">Print Form</button>
-              <button type="button" class="secondary" id="cClear">New Call</button>
+              <div class="med-body" data-k="body">
+                <div class="field combo">
+                  <div class="label-row">
+                    <label data-for="drug">Drug, strength &amp; form</label>
+                    <button type="button" class="link-btn" data-k="ndcToggle">Look up by NDC</button>
+                  </div>
+                  <input data-k="drug" class="big" type="text" autocomplete="off" spellcheck="false"
+                         role="combobox" aria-expanded="false" aria-autocomplete="list"
+                         placeholder="Atorvastatin 40 mg tablet" />
+                  <ul data-k="list" class="suggest" role="listbox" aria-label="Drug suggestions" hidden></ul>
+                  <div class="ndc-row" data-k="ndcRow" hidden>
+                    <input data-k="ndc" class="mono" type="text" autocomplete="off" spellcheck="false"
+                           placeholder="NDC from the bottle, e.g. 0093-7180-56" aria-label="NDC" />
+                    <button type="button" class="secondary" data-k="ndcBtn">Look up</button>
+                  </div>
+                  <div data-k="ndcStatus" class="lookup" aria-live="polite"></div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label data-for="qty">Quantity</label>
+                    <input data-k="qty" type="text" autocomplete="off" placeholder="90" />
+                  </div>
+                  <div>
+                    <label data-for="refills">Refills</label>
+                    <input data-k="refills" type="text" autocomplete="off" placeholder="3" />
+                  </div>
+                  <div style="flex:1.6;">
+                    <label data-for="daw">DAW</label>
+                    <select data-k="daw">
+                      <option value="">Not said</option>
+                      <option value="0">0 · Substitution OK</option>
+                      <option value="1">1 · Dispense as written</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field">
+                  <label data-for="sig">Directions <span class="opt">— the sig, as dictated</span></label>
+                  <textarea data-k="sig" rows="2" spellcheck="true" placeholder="1 tab po qhs"></textarea>
+                </div>
+              </div>
             </div>
-            <div id="cStatus" class="status" aria-live="polite"></div>
+          </template>
+
+          <div class="print-bar">
+            <div class="print-preview">
+              <div class="paper-stage" id="cStage" role="button" tabindex="0" aria-label="Enlarge the preview" title="Click to enlarge">
+                <div class="paper-sheet">
+                  <iframe id="cPreview" title="Form preview" scrolling="no" tabindex="-1"></iframe>
+                </div>
+              </div>
+              <div class="pager" id="cPager" hidden>
+                <button type="button" class="secondary" id="cPrev" aria-label="Previous slip">&lsaquo;</button>
+                <span id="cPage"></span>
+                <button type="button" class="secondary" id="cNext" aria-label="Next slip">&rsaquo;</button>
+              </div>
+            </div>
+            <div class="print-notes">
+              <ul class="notes" id="cNotes"></ul>
+            </div>
+            <div class="print-actions">
+              <div class="stamp-line">Timestamp <span id="cStamp"></span></div>
+              <div class="print-row">
+                <div class="copies">
+                  <label for="cCopies">Copies</label>
+                  <input id="cCopies" type="number" min="1" max="20" value="1" />
+                </div>
+                <button type="button" id="cPrint">Print Form</button>
+              </div>
+              <button type="button" class="secondary" id="cClear">New Call</button>
+              <div class="hint" id="cSheetInfo"></div>
+              <div id="cStatus" class="status" aria-live="polite"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -576,7 +607,7 @@
       <!-- Transfer: a prescription transferred in from another pharmacy by phone -->
       <section class="card callin" id="panel-transfer" role="tabpanel" aria-labelledby="tab-transfer" hidden>
         <div class="callin-grid">
-          <div class="callin-form">
+          <div class="callin-form callin-col">
 
             <fieldset class="block">
               <legend>Patient</legend>
@@ -588,60 +619,6 @@
                 <div>
                   <label for="tDob">Date of birth</label>
                   <input id="tDob" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="04/11/1958" />
-                </div>
-              </div>
-            </fieldset>
-
-            <fieldset class="block">
-              <legend>Prescription</legend>
-              <div class="field combo">
-                <label for="tDrug">Drug, strength &amp; form</label>
-                <input id="tDrug" class="big" type="text" autocomplete="off" spellcheck="false"
-                       role="combobox" aria-expanded="false" aria-autocomplete="list"
-                       aria-controls="tDrugList" placeholder="Atorvastatin 40 mg tablet" />
-                <ul id="tDrugList" class="suggest" role="listbox" aria-label="Drug suggestions" hidden></ul>
-              </div>
-
-              <div class="field ndc-lookup">
-                <label for="tNdc">Or look it up by NDC <span class="opt">— from their label</span></label>
-                <div class="ndc-row">
-                  <input id="tNdc" class="mono" type="text" autocomplete="off" spellcheck="false"
-                         placeholder="0093-7180-56" />
-                  <button type="button" class="secondary" id="tNdcBtn">Look up</button>
-                </div>
-                <div id="tNdcStatus" class="lookup" aria-live="polite"></div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="tQty">Quantity</label>
-                  <input id="tQty" type="text" autocomplete="off" placeholder="90" />
-                </div>
-                <div>
-                  <label for="tRefills">Refills left</label>
-                  <input id="tRefills" type="text" autocomplete="off" placeholder="3" />
-                </div>
-              </div>
-              <div class="field">
-                <label for="tSig">Directions <span class="opt">— the sig, as read to you</span></label>
-                <textarea id="tSig" rows="2" spellcheck="true" placeholder="1 tab po qhs"></textarea>
-                <div class="hint">Shorthand spells itself out: <span class="mono">1 tab po bid prn pain</span> → Take 1 tablet by mouth twice daily as needed for pain. Backspace right after to undo.</div>
-              </div>
-              <div class="row">
-                <div>
-                  <label for="tRxNum">Their Rx #</label>
-                  <input id="tRxNum" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="6012345" />
-                </div>
-                <div>
-                  <label for="tWritten">Written</label>
-                  <input id="tWritten" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="01/15/2026" />
-                </div>
-                <div>
-                  <label for="tFirstFill">First filled</label>
-                  <input id="tFirstFill" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="01/16/2026" />
-                </div>
-                <div>
-                  <label for="tLastFill">Last filled</label>
-                  <input id="tLastFill" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="09/12/2026" />
                 </div>
               </div>
             </fieldset>
@@ -691,37 +668,94 @@
                   <label for="tPharmacist">Transferring pharmacist</label>
                   <input id="tPharmacist" type="text" autocomplete="off" placeholder="Sam Lee, RPh" />
                 </div>
-                <div style="max-width:140px;">
-                  <label for="tInitials">Received by <span class="opt">— initials</span></label>
+                <div class="ini-col">
+                  <label for="tInitials">Received by</label>
                   <input id="tInitials" class="mono initials" type="text" maxlength="4" autocomplete="off" placeholder="CM" />
-                </div>
-                <div class="stamp-live">
-                  <div class="lbl">Timestamp</div>
-                  <div class="stamp" id="tStamp"></div>
                 </div>
               </div>
             </fieldset>
 
           </div>
 
-          <div class="callin-side">
-            <div class="paper-stage">
-              <div class="paper-sheet">
-                <iframe id="tPreview" title="Form preview" scrolling="no"></iframe>
+          <div class="callin-form callin-col">
+            <fieldset class="block">
+              <legend>Prescription</legend>
+              <div class="field combo">
+                <div class="label-row">
+                  <label for="tDrug">Drug, strength &amp; form</label>
+                  <button type="button" class="link-btn" id="tNdcToggle">Look up by NDC</button>
+                </div>
+                <input id="tDrug" class="big" type="text" autocomplete="off" spellcheck="false"
+                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-controls="tDrugList" placeholder="Atorvastatin 40 mg tablet" />
+                <ul id="tDrugList" class="suggest" role="listbox" aria-label="Drug suggestions" hidden></ul>
+                <div class="ndc-row" id="tNdcRow" hidden>
+                  <input id="tNdc" class="mono" type="text" autocomplete="off" spellcheck="false"
+                         placeholder="NDC from their label, e.g. 0093-7180-56" aria-label="NDC" />
+                  <button type="button" class="secondary" id="tNdcBtn">Look up</button>
+                </div>
+                <div id="tNdcStatus" class="lookup" aria-live="polite"></div>
               </div>
-            </div>
-            <div class="hint" id="tSheetInfo"></div>
-            <ul class="notes" id="tNotes"></ul>
+              <div class="row">
+                <div>
+                  <label for="tQty">Quantity</label>
+                  <input id="tQty" type="text" autocomplete="off" placeholder="90" />
+                </div>
+                <div>
+                  <label for="tRefills">Refills left</label>
+                  <input id="tRefills" type="text" autocomplete="off" placeholder="3" />
+                </div>
+                <div>
+                  <label for="tRxNum">Their Rx #</label>
+                  <input id="tRxNum" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="6012345" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="tSig">Directions <span class="opt">— the sig, as read to you</span></label>
+                <textarea id="tSig" rows="2" spellcheck="true" placeholder="1 tab po qhs"></textarea>
+                <div class="hint">Shorthand spells itself out: <span class="mono">1 tab po bid</span> → Take 1 tablet by mouth twice daily. Backspace right after to undo.</div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="tWritten">Written</label>
+                  <input id="tWritten" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="01/15/2026" />
+                </div>
+                <div>
+                  <label for="tFirstFill">First filled</label>
+                  <input id="tFirstFill" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="01/16/2026" />
+                </div>
+                <div>
+                  <label for="tLastFill">Last filled</label>
+                  <input id="tLastFill" class="mono" type="text" inputmode="numeric" autocomplete="off" placeholder="09/12/2026" />
+                </div>
+              </div>
+            </fieldset>
+          </div>
 
-            <div class="print-row">
-              <div class="copies">
-                <label for="tCopies">Copies</label>
-                <input id="tCopies" type="number" min="1" max="20" value="1" />
+          <div class="print-bar">
+            <div class="print-preview">
+              <div class="paper-stage" id="tStage" role="button" tabindex="0" aria-label="Enlarge the preview" title="Click to enlarge">
+                <div class="paper-sheet">
+                  <iframe id="tPreview" title="Form preview" scrolling="no" tabindex="-1"></iframe>
+                </div>
               </div>
-              <button type="button" id="tPrint">Print Form</button>
-              <button type="button" class="secondary" id="tClear">New Transfer</button>
             </div>
-            <div id="tStatus" class="status" aria-live="polite"></div>
+            <div class="print-notes">
+              <ul class="notes" id="tNotes"></ul>
+            </div>
+            <div class="print-actions">
+              <div class="stamp-line">Timestamp <span id="tStamp"></span></div>
+              <div class="print-row">
+                <div class="copies">
+                  <label for="tCopies">Copies</label>
+                  <input id="tCopies" type="number" min="1" max="20" value="1" />
+                </div>
+                <button type="button" id="tPrint">Print Form</button>
+              </div>
+              <button type="button" class="secondary" id="tClear">New Transfer</button>
+              <div class="hint" id="tSheetInfo"></div>
+              <div id="tStatus" class="status" aria-live="polite"></div>
+            </div>
           </div>
         </div>
       </section>
